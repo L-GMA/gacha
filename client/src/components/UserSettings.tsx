@@ -381,6 +381,15 @@ function SoundSection() {
           onChange={(id) => setSetting("micDeviceId", id)}
         />
       </div>
+      <div className="us-stack">
+        <div className="us-setting-row">
+          <div className="us-setting-text">
+            <span>Подавление шума (Krisp)</span>
+            <small>AI-очистка голоса от фонового шума. Обработка локальная, без записи звука</small>
+          </div>
+          <Toggle checked={settings.krisp} onChange={(v) => setSetting("krisp", v)} label="Krisp" />
+        </div>
+      </div>
       <p className="hint">Смена микрофона применится после повторного входа в голосовой канал. Усиление слышно собеседникам сразу.</p>
     </div>
   );

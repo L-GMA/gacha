@@ -5,11 +5,14 @@ import {
   ConnectionState,
   Track,
   type RemoteParticipant,
+  type LocalAudioTrack,
 } from "livekit-client";
 import { api } from "../api.js";
 import { Avatar } from "./Avatar.js";
 import { playJoinSound, playLeaveSound } from "../sounds.js";
 import { DeafenOffMiniIcon, MicOffMiniIcon } from "./stateIcons.js";
+import { getSettings, subscribeSettings } from "../settings.js";
+import { applyKrisp } from "../krisp.js";
 
 type RemoteAudioTrackLike = {
   setVolume(volume: number): void;
@@ -269,6 +272,7 @@ export function VoiceRoom({
     let room: Room | null = null;
     let pingTimer: ReturnType<typeof setInterval> | null = null;
     let levelTimer: ReturnType<typeof setInterval> | null = null;
+    let unsubKrisp: (() => void) | undefined;
 
     const resumeMix = () => {
       const ctx = mixCtxRef.current;
@@ -531,6 +535,9 @@ export function VoiceRoom({
           refresh();
         });
         room.on(RoomEvent.LocalTrackPublished, (pub) => {
+          if (pub.source === Track.Source.Microphone && pub.track) {
+            void applyKrisp(pub.track as LocalAudioTrack, getSettings().krisp);
+          }
           if (pub.source === Track.Source.ScreenShare && pub.track) {
             const me = meIdentityRef.current;
             if (me) {
@@ -628,6 +635,14 @@ export function VoiceRoom({
         }
         if (alive) syncMic();
 
+        unsubKrisp = subscribeSettings(() => {
+          if (!alive) return;
+          const pub = lk.localParticipant.getTrackPublication(Track.Source.Microphone);
+          if (pub?.track) {
+            void applyKrisp(pub.track as LocalAudioTrack, getSettings().krisp);
+          }
+        });
+
         if (!lk.canPlaybackAudio) {
           try {
             await lk.startAudio();
@@ -703,6 +718,7 @@ export function VoiceRoom({
         mixCtxRef.current = null;
       }
       tracksRef.current.clear();
+      unsubKrisp?.();
       preTrackRef.current?.stop();
       preTrackRef.current = null;
       if (room) {

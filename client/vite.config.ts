@@ -8,7 +8,7 @@ const ROOT_PKG = JSON.parse(readFileSync(new URL("../package.json", import.meta.
 
 const CSP_WEB = [
   "default-src 'self'",
-  "script-src 'self'",
+  "script-src 'self' 'wasm-unsafe-eval' blob:",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "connect-src 'self' wss://voice.gachandra.ru",
@@ -22,7 +22,7 @@ const CSP_WEB = [
 
 const CSP_DESKTOP = [
   "default-src 'self' file: data: blob:",
-  "script-src 'self' file:",
+  "script-src 'self' file: 'wasm-unsafe-eval' blob:",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "connect-src https://gachandra.ru wss://voice.gachandra.ru",
