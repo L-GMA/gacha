@@ -13,6 +13,7 @@ import { playJoinSound, playLeaveSound } from "../sounds.js";
 import { DeafenOffMiniIcon, MicOffMiniIcon } from "./stateIcons.js";
 import { getSettings, subscribeSettings } from "../settings.js";
 import { applyKrisp } from "../krisp.js";
+import { getVoiceMicGraph, switchMicGraphDevice } from "../micPipeline.js";
 
 type RemoteAudioTrackLike = {
   setVolume(volume: number): void;
@@ -273,6 +274,8 @@ export function VoiceRoom({
     let pingTimer: ReturnType<typeof setInterval> | null = null;
     let levelTimer: ReturnType<typeof setInterval> | null = null;
     let unsubKrisp: (() => void) | undefined;
+    let unsubMic: (() => void) | undefined;
+    let lastMicDevice = getSettings().micDeviceId;
 
     const resumeMix = () => {
       const ctx = mixCtxRef.current;
@@ -595,7 +598,9 @@ export function VoiceRoom({
 
         const enableMic = async (): Promise<boolean> => {
           try {
-            await lk.localParticipant.setMicrophoneEnabled(true);
+            await lk.localParticipant.setMicrophoneEnabled(true, {
+              deviceId: getSettings().micDeviceId || { ideal: "default" },
+            });
             micPendingRef.current = false;
             return true;
           } catch (err) {
@@ -643,6 +648,31 @@ export function VoiceRoom({
             const s = getSettings();
             void applyKrisp(pub.track as LocalAudioTrack, s.krisp, s.krispQuality);
           }
+        });
+
+        const switchMic = async (deviceId: string): Promise<void> => {
+          const graph = getVoiceMicGraph();
+          const pub = lk.localParticipant.getTrackPublication(Track.Source.Microphone);
+          const track = pub?.track as LocalAudioTrack | undefined;
+          if (graph && track && track.mediaStreamTrack === graph.track) {
+            await switchMicGraphDevice(graph, deviceId);
+            return;
+          }
+          if (track) {
+            await track.restartTrack({
+              deviceId: deviceId || { ideal: "default" },
+            });
+          }
+        };
+
+        unsubMic = subscribeSettings(() => {
+          if (!alive) return;
+          const deviceId = getSettings().micDeviceId;
+          if (deviceId === lastMicDevice) return;
+          lastMicDevice = deviceId;
+          void switchMic(deviceId).catch((err) => {
+            console.warn("[voice] смена микрофона не удалась:", err);
+          });
         });
 
         if (!lk.canPlaybackAudio) {
@@ -721,6 +751,7 @@ export function VoiceRoom({
       }
       tracksRef.current.clear();
       unsubKrisp?.();
+      unsubMic?.();
       preTrackRef.current?.stop();
       preTrackRef.current = null;
       if (room) {
@@ -779,7 +810,10 @@ export function VoiceRoom({
     if (deafenedRef.current) return;
     try {
       const next = !room.localParticipant.isMicrophoneEnabled;
-      await room.localParticipant.setMicrophoneEnabled(next);
+      await room.localParticipant.setMicrophoneEnabled(
+        next,
+        next ? { deviceId: getSettings().micDeviceId || { ideal: "default" } } : undefined,
+      );
       setMuted(!next);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка");

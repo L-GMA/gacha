@@ -8,6 +8,8 @@ export type MicGraph = {
   analyser: AnalyserNode;
   ctx: AudioContext;
   monitorConnected: boolean;
+  source: MediaStreamAudioSourceNode;
+  raw: MediaStreamTrack;
   close: () => void;
 };
 
@@ -54,6 +56,8 @@ export async function openMicGraph(deviceId: string): Promise<MicGraph> {
     analyser,
     ctx,
     monitorConnected: false,
+    source,
+    raw,
     close() {
       if (closed) return;
       closed = true;
@@ -71,6 +75,37 @@ export async function openMicGraph(deviceId: string): Promise<MicGraph> {
     },
   };
   return graph;
+}
+
+export async function switchMicGraphDevice(
+  graph: MicGraph | null,
+  deviceId: string,
+): Promise<boolean> {
+  if (!graph || graph.deviceId === deviceId) return true;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia(
+      deviceId ? { audio: { deviceId } } : { audio: true },
+    );
+    const raw = stream.getAudioTracks()[0] ?? null;
+    if (!raw) {
+      for (const t of stream.getTracks()) t.stop();
+      return false;
+    }
+    graph.source.disconnect();
+    try {
+      graph.raw.stop();
+    } catch {
+      /* ignore */
+    }
+    const source = graph.ctx.createMediaStreamSource(stream);
+    source.connect(graph.gain);
+    graph.source = source;
+    graph.raw = raw;
+    graph.deviceId = deviceId;
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function setGraphGain(graph: MicGraph | null, value: number): void {

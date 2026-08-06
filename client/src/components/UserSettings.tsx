@@ -323,7 +323,7 @@ function MicLevelMeter({ settings }: { settings: ReturnType<typeof getSettings> 
       <div className="us-setting-row">
         <div className="us-setting-text">
           <span>Прослушать микрофон</span>
-          <small>Воспроизведение вашего голоса через динамики. Лучше в наушниках.</small>
+          <small>Прослушать микрофон.</small>
         </div>
         <button
           className={`btn small ${monitor ? "primary" : ""}`}
@@ -385,14 +385,14 @@ function SoundSection() {
         <div className="us-setting-row">
           <div className="us-setting-text">
             <span>Подавление шума (Krisp)</span>
-            <small>AI-очистка голоса от фонового шума. Обработка локальная, без записи звука</small>
+            <small>AI-очистка голоса от фонового шума.</small>
           </div>
           <Toggle checked={settings.krisp} onChange={(v) => setSetting("krisp", v)} label="Krisp" />
         </div>
         <div className="us-setting-row">
           <div className="us-setting-text">
             <span>Степень подавления шума</span>
-            <small>Максимальная чистит сильнее, но нагружает процессор</small>
+            <small>Настройка влияет на нагрузку ЦП.</small>
           </div>
           <select
             className="us-select"
@@ -400,13 +400,12 @@ function SoundSection() {
             disabled={!settings.krisp}
             onChange={(e) => setSetting("krispQuality", e.target.value as "low" | "medium" | "high")}
           >
-            <option value="low">Экономная</option>
-            <option value="medium">Стандартная</option>
+            <option value="low">Минимальная</option>
+            <option value="medium">Средняя</option>
             <option value="high">Максимальная</option>
           </select>
         </div>
       </div>
-      <p className="hint">Смена микрофона применится после повторного входа в голосовой канал. Усиление слышно собеседникам сразу.</p>
     </div>
   );
 }
