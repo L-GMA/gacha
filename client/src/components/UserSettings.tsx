@@ -153,19 +153,24 @@ function ProfileSection({ me, onChanged }: { me: User; onChanged: () => void }) 
         </div>
       </div>
 
-      <label className="field">
-        <span>Ник</span>
-        <input value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder={me.login} maxLength={32} />
-      </label>
-      <label className="field">
-        <span>Аватар (ссылка на картинку)</span>
-        <input value={avatar} onChange={(e) => setAvatar(e.target.value)} placeholder="https://…" />
-      </label>
-      <label className="field">
-        <span>О себе (до 50 символов)</span>
-        <input value={bio} onChange={(e) => setBio(e.target.value)} placeholder="Кратко о себе…" maxLength={50} />
-        <span className="field-counter">{bio.length}/50</span>
-      </label>
+      <div className="us-group">
+        <div className="us-group-head">Профиль</div>
+        <div className="us-stack">
+          <label className="us-setting-row us-row-field">
+            <span className="us-field-label">Ник</span>
+            <input value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder={me.login} maxLength={32} />
+          </label>
+          <label className="us-setting-row us-row-field">
+            <span className="us-field-label">Аватар</span>
+            <input value={avatar} onChange={(e) => setAvatar(e.target.value)} placeholder="https://…" />
+          </label>
+          <label className="us-setting-row us-row-field us-row-field-stacked">
+            <span className="us-field-label">О себе</span>
+            <input value={bio} onChange={(e) => setBio(e.target.value)} placeholder="Кратко о себе…" maxLength={50} />
+            <span className="field-counter">{bio.length}/50</span>
+          </label>
+        </div>
+      </div>
 
       {error && <p className="error">{error}</p>}
       {saved && <p className="us-saved">Изменения сохранены</p>}
@@ -207,8 +212,10 @@ function DeviceSelect({
   onChange: (id: string) => void;
 }) {
   return (
-    <label className="field">
-      <span>{label}</span>
+    <div className="us-setting-row">
+      <div className="us-setting-text">
+        <span>{label}</span>
+      </div>
       <select className="us-select" value={value} onChange={(e) => onChange(e.target.value)}>
         <option value="">Системное устройство по умолчанию</option>
         {devices.map((d) => (
@@ -217,7 +224,7 @@ function DeviceSelect({
           </option>
         ))}
       </select>
-    </label>
+    </div>
   );
 }
 
@@ -228,20 +235,23 @@ function SoundSection() {
   useEffect(() => subscribeSettings(() => setLocal(getSettings())), []);
 
   return (
-    <div className="us-stack">
-      <div className="us-setting-row">
-        <div className="us-setting-text">
-          <span>Звуки входа и выхода из голосового канала</span>
-          <small>Короткие звуковые сигналы при подключении/отключении участников</small>
+    <div className="us-group">
+      <div className="us-group-head">Звук</div>
+      <div className="us-stack">
+        <div className="us-setting-row">
+          <div className="us-setting-text">
+            <span>Звуки входа и выхода из голосового канала</span>
+            <small>Звуковые сигналы при подключении/отключении участников</small>
+          </div>
+          <Toggle checked={settings.sounds} onChange={(v) => setSetting("sounds", v)} label="Звуки" />
         </div>
-        <Toggle checked={settings.sounds} onChange={(v) => setSetting("sounds", v)} label="Звуки" />
+        <DeviceSelect
+          label="Микрофон"
+          devices={mics}
+          value={settings.micDeviceId}
+          onChange={(id) => setSetting("micDeviceId", id)}
+        />
       </div>
-      <DeviceSelect
-        label="Микрофон"
-        devices={mics}
-        value={settings.micDeviceId}
-        onChange={(id) => setSetting("micDeviceId", id)}
-      />
       <p className="hint">Смена микрофона применится после повторного входа в голосовой канал.</p>
     </div>
   );
@@ -294,14 +304,17 @@ function CameraSection() {
   useEffect(() => subscribeSettings(() => setLocal(getSettings())), []);
 
   return (
-    <div className="us-stack">
+    <div className="us-group">
+      <div className="us-group-head">Камера</div>
       <CameraPreview deviceId={settings.cameraDeviceId} />
-      <DeviceSelect
-        label="Камера"
-        devices={cams}
-        value={settings.cameraDeviceId}
-        onChange={(id) => setSetting("cameraDeviceId", id)}
-      />
+      <div className="us-stack">
+        <DeviceSelect
+          label="Камера"
+          devices={cams}
+          value={settings.cameraDeviceId}
+          onChange={(id) => setSetting("cameraDeviceId", id)}
+        />
+      </div>
       <p className="hint">Видеозвонки и трансляция появятся позже — пока можно проверить камеру и выбрать устройство.</p>
     </div>
   );
@@ -326,34 +339,37 @@ function NotificationsSection() {
   };
 
   return (
-    <div className="us-stack">
-      <div className="us-setting-row">
-        <div className="us-setting-text">
-          <span>Уведомления о новых сообщениях</span>
-          <small>Показывать системные уведомления, когда приходят сообщения</small>
-        </div>
-        <Toggle checked={settings.notifications} onChange={(v) => setSetting("notifications", v)} label="Уведомления" />
-      </div>
-
-      {typeof Notification !== "undefined" && (
+    <div className="us-group">
+      <div className="us-group-head">Уведомления</div>
+      <div className="us-stack">
         <div className="us-setting-row">
           <div className="us-setting-text">
-            <span>Разрешение браузера</span>
-            <small>
-              {perm === "granted"
-                ? "Уведомления разрешены"
-                : perm === "denied"
-                  ? "Уведомления заблокированы браузером"
-                  : "Разрешение ещё не выдано"}
-            </small>
+            <span>Уведомления о новых сообщениях</span>
+            <small>Показывать системные уведомления, когда приходят сообщения</small>
           </div>
-          {perm !== "granted" && perm !== "denied" && (
-            <button className="btn small" onClick={requestPermission}>
-              Разрешить
-            </button>
-          )}
+          <Toggle checked={settings.notifications} onChange={(v) => setSetting("notifications", v)} label="Уведомления" />
         </div>
-      )}
+
+        {typeof Notification !== "undefined" && (
+          <div className="us-setting-row">
+            <div className="us-setting-text">
+              <span>Разрешение браузера</span>
+              <small>
+                {perm === "granted"
+                  ? "Уведомления разрешены"
+                  : perm === "denied"
+                    ? "Уведомления заблокированы браузером"
+                    : "Разрешение ещё не выдано"}
+              </small>
+            </div>
+            {perm !== "granted" && perm !== "denied" && (
+              <button className="btn small" onClick={requestPermission}>
+                Разрешить
+              </button>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

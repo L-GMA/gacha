@@ -65,7 +65,7 @@ function createSplashWindow() {
     maximizable: false,
     fullscreenable: false,
     frame: false,
-    backgroundColor: "#1e1f22",
+    backgroundColor: "#000000",
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
