@@ -1116,7 +1116,10 @@ export function VoiceRoom({
           // тяжёлое кодирование ради одного несовместимого зрителя.
           videoCodec: supportsH264() ? "h264" : undefined,
           backupCodec: false,
-          videoEncoding: {
+          // livekit-client для screen share читает именно screenShareEncoding,
+          // videoEncoding игнорируется и проскакивает дефолтный ScreenSharePreset
+          // с maxFramerate: 15 — зритель тогда видит 15 FPS, а не источник.
+          screenShareEncoding: {
             maxBitrate: screenBitrate(fps, quality),
             maxFramerate: fps,
           },
