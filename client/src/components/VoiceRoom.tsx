@@ -1012,22 +1012,10 @@ export function VoiceRoom({
           return;
         }
         const rawVideo = stream.getVideoTracks()[0] ?? null;
-        let rawAudio = stream.getAudioTracks()[0] ?? null;
+        const rawAudio = stream.getAudioTracks()[0] ?? null;
         if (!rawVideo) {
           for (const t of stream.getTracks()) t.stop();
           return;
-        }
-        if (!rawAudio && isDesktopApp) {
-          try {
-            const loopback = await navigator.mediaDevices.getUserMedia({
-              audio: {
-                mandatory: { chromeMediaSource: "desktop" },
-              } as unknown as MediaTrackConstraints,
-            });
-            rawAudio = loopback.getAudioTracks()[0] ?? null;
-          } catch {
-            /* системное аудио недоступно */
-          }
         }
         const canvas = document.createElement("canvas");
         canvas.width = width;
@@ -1066,7 +1054,6 @@ export function VoiceRoom({
         const outStream = canvas.captureStream(fps);
         const outVideo = outStream.getVideoTracks()[0];
         const localVideo = new LocalVideoTrack(outVideo);
-        const localAudio = rawAudio ? new LocalAudioTrack(rawAudio) : null;
         await room.localParticipant.publishTrack(localVideo, {
           source: Track.Source.ScreenShare,
           name: "screen",
@@ -1076,7 +1063,24 @@ export function VoiceRoom({
             maxFramerate: fps,
           },
         });
-        if (localAudio) {
+        if (!roomRef.current) {
+          running = false;
+          if (drawTimer) clearInterval(drawTimer);
+          localVideo.stop();
+          videoEl.remove();
+          for (const t of stream.getTracks()) t.stop();
+          return;
+        }
+        // Звук трансляции: в вебе getDisplayMedia может отдать звук таба/системы —
+        // публикуем его отдельным треком. В Electron getDisplayMedia отдаёт только
+        // видео, а системное аудио через chromeMediaSource крашит рендерер
+        // (известный баг Chromium/Electron, "reason 263"), поэтому на десктопе
+        // демонстрация идёт без звука.
+        let localAudio: LocalAudioTrack | null = null;
+        if (rawAudio) {
+          localAudio = new LocalAudioTrack(rawAudio);
+        }
+        if (localAudio && roomRef.current) {
           await room.localParticipant.publishTrack(localAudio, {
             source: Track.Source.ScreenShareAudio,
             name: "screen-audio",
