@@ -16,6 +16,14 @@ type RemoteAudioTrackLike = {
   attachedElements: HTMLMediaElement[];
 };
 
+type PlaybackCtx = {
+  ctx: AudioContext;
+  src: MediaStreamAudioSourceNode;
+  mono: GainNode;
+  dest: MediaStreamAudioDestinationNode;
+  el: HTMLAudioElement;
+};
+
 const SPEAKING_THRESHOLD = 0.02;
 const SPEAKING_HANG_MS = 350;
 
@@ -201,6 +209,7 @@ export function VoiceRoom({
   const analysersRef = useRef<
     Map<string, { ctx: AudioContext; analyser: AnalyserNode; track: Track }>
   >(new Map());
+  const playbackCtxRef = useRef<Map<string, PlaybackCtx>>(new Map());
   const tracksRef = useRef<Map<string, Track>>(new Map());
   const storedVolumesRef = useRef<Map<string, number>>(new Map());
   const lastAboveRef = useRef<Map<string, number>>(new Map());
@@ -275,12 +284,53 @@ export function VoiceRoom({
       storedVolumesRef.current.set(name, stored);
       tracksRef.current.set(participant.identity, track);
       setVolumes((prev) => ({ ...prev, [participant.identity]: stored }));
+      try {
+        const stream = track.mediaStreamTrack
+          ? new MediaStream([track.mediaStreamTrack])
+          : track.mediaStream;
+        if (stream) {
+          const ctx = new AudioContext();
+          void ctx.resume();
+          const src = ctx.createMediaStreamSource(stream);
+          const mono = ctx.createGain();
+          mono.channelCount = 1;
+          mono.channelCountMode = "explicit";
+          mono.channelInterpretation = "speakers";
+          src.connect(mono);
+          const dest = ctx.createMediaStreamDestination();
+          mono.connect(dest);
+          el.srcObject = dest.stream;
+          el.muted = false;
+          el.autoplay = true;
+          void el.play().catch(() => {});
+          playbackCtxRef.current.set(participant.identity, {
+            ctx,
+            src,
+            mono,
+            dest,
+            el,
+          });
+        }
+      } catch {
+        /* ignore */
+      }
       applyVolumeToTrack(track, deafenedRef.current ? 0 : stored);
     };
 
     const detachAudio = (track: Track, participant?: RemoteParticipant) => {
       for (const el of track.detach()) audioElsRef.current.delete(el);
-      if (participant) tracksRef.current.delete(participant.identity);
+      if (participant) {
+        tracksRef.current.delete(participant.identity);
+        const pb = playbackCtxRef.current.get(participant.identity);
+        if (pb) {
+          try {
+            void pb.ctx.close();
+          } catch {
+            /* ignore */
+          }
+          playbackCtxRef.current.delete(participant.identity);
+        }
+      }
     };
 
     const syncMic = () => {
@@ -412,7 +462,7 @@ export function VoiceRoom({
       try {
         const { token, url } = await api.voiceJoin(channelId);
         if (!alive) return;
-        room = new Room({ webAudioMix: true });
+        room = new Room();
         roomRef.current = room;
 
         room.on(RoomEvent.ParticipantConnected, (p: RemoteParticipant) => {
@@ -424,6 +474,15 @@ export function VoiceRoom({
         room.on(RoomEvent.ParticipantDisconnected, (p) => {
           removeAnalyser(p.identity);
           tracksRef.current.delete(p.identity);
+          const pb = playbackCtxRef.current.get(p.identity);
+          if (pb) {
+            try {
+              void pb.ctx.close();
+            } catch {
+              /* ignore */
+            }
+            playbackCtxRef.current.delete(p.identity);
+          }
           const t = screensRef.current.get(p.identity);
           if (t) {
             for (const el of t.detach()) el.remove();
@@ -612,6 +671,8 @@ export function VoiceRoom({
       audioElsRef.current.clear();
       for (const [, a] of analysersRef.current) void a.ctx.close();
       analysersRef.current.clear();
+      for (const [, pb] of playbackCtxRef.current) void pb.ctx.close();
+      playbackCtxRef.current.clear();
       tracksRef.current.clear();
       preTrackRef.current?.stop();
       preTrackRef.current = null;
@@ -778,6 +839,9 @@ export function VoiceRoom({
     const room = roomRef.current;
     if (!room) return;
     await room.startAudio();
+    playbackCtxRef.current.forEach((pb) => {
+      if (pb.ctx.state === "suspended") void pb.ctx.resume();
+    });
     setAudioBlocked(!room.canPlaybackAudio);
   };
 
