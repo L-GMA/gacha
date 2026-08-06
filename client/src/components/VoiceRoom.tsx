@@ -17,11 +17,9 @@ type RemoteAudioTrackLike = {
 };
 
 type PlaybackCtx = {
-  ctx: AudioContext;
   src: MediaStreamAudioSourceNode;
   mono: GainNode;
-  dest: MediaStreamAudioDestinationNode;
-  el: HTMLAudioElement;
+  track: Track;
 };
 
 const SPEAKING_THRESHOLD = 0.02;
@@ -209,6 +207,7 @@ export function VoiceRoom({
   const analysersRef = useRef<
     Map<string, { ctx: AudioContext; analyser: AnalyserNode; track: Track }>
   >(new Map());
+  const mixCtxRef = useRef<AudioContext | null>(null);
   const playbackCtxRef = useRef<Map<string, PlaybackCtx>>(new Map());
   const tracksRef = useRef<Map<string, Track>>(new Map());
   const storedVolumesRef = useRef<Map<string, number>>(new Map());
@@ -249,6 +248,16 @@ export function VoiceRoom({
     } catch {
       /* ignore */
     }
+    for (const [, pb] of playbackCtxRef.current) {
+      if (pb.track === track) {
+        try {
+          pb.mono.gain.setTargetAtTime(v, 0, 0.02);
+        } catch {
+          /* ignore */
+        }
+        break;
+      }
+    }
   };
 
   useEffect(() => {
@@ -260,6 +269,13 @@ export function VoiceRoom({
     let room: Room | null = null;
     let pingTimer: ReturnType<typeof setInterval> | null = null;
     let levelTimer: ReturnType<typeof setInterval> | null = null;
+
+    const resumeMix = () => {
+      const ctx = mixCtxRef.current;
+      if (ctx && ctx.state === "suspended") void ctx.resume();
+    };
+    window.addEventListener("pointerdown", resumeMix);
+    window.addEventListener("keydown", resumeMix);
 
     const refresh = () => {
       if (!alive || !room) return;
@@ -278,6 +294,7 @@ export function VoiceRoom({
 
     const attachAudio = (track: Track, participant: RemoteParticipant) => {
       const el = track.attach();
+      el.muted = true;
       audioElsRef.current.add(el);
       const name = participant.name ?? participant.identity;
       const stored = storedVolumesRef.current.get(name) ?? readStoredVolume(name);
@@ -289,27 +306,21 @@ export function VoiceRoom({
           ? new MediaStream([track.mediaStreamTrack])
           : track.mediaStream;
         if (stream) {
-          const ctx = new AudioContext();
-          void ctx.resume();
+          let ctx = mixCtxRef.current;
+          if (!ctx || ctx.state === "closed") {
+            ctx = new AudioContext();
+            mixCtxRef.current = ctx;
+          }
+          if (ctx.state === "suspended") void ctx.resume();
           const src = ctx.createMediaStreamSource(stream);
           const mono = ctx.createGain();
           mono.channelCount = 1;
           mono.channelCountMode = "explicit";
           mono.channelInterpretation = "speakers";
+          mono.gain.value = deafenedRef.current ? 0 : stored;
           src.connect(mono);
-          const dest = ctx.createMediaStreamDestination();
-          mono.connect(dest);
-          el.srcObject = dest.stream;
-          el.muted = false;
-          el.autoplay = true;
-          void el.play().catch(() => {});
-          playbackCtxRef.current.set(participant.identity, {
-            ctx,
-            src,
-            mono,
-            dest,
-            el,
-          });
+          mono.connect(ctx.destination);
+          playbackCtxRef.current.set(participant.identity, { src, mono, track });
         }
       } catch {
         /* ignore */
@@ -324,7 +335,8 @@ export function VoiceRoom({
         const pb = playbackCtxRef.current.get(participant.identity);
         if (pb) {
           try {
-            void pb.ctx.close();
+            pb.src.disconnect();
+            pb.mono.disconnect();
           } catch {
             /* ignore */
           }
@@ -464,7 +476,6 @@ export function VoiceRoom({
         if (!alive) return;
         room = new Room();
         roomRef.current = room;
-
         room.on(RoomEvent.ParticipantConnected, (p: RemoteParticipant) => {
           const mine = room?.localParticipant.joinedAt?.getTime() ?? 0;
           const theirs = p.joinedAt?.getTime() ?? mine + 1;
@@ -477,7 +488,8 @@ export function VoiceRoom({
           const pb = playbackCtxRef.current.get(p.identity);
           if (pb) {
             try {
-              void pb.ctx.close();
+              pb.src.disconnect();
+              pb.mono.disconnect();
             } catch {
               /* ignore */
             }
@@ -665,14 +677,31 @@ export function VoiceRoom({
 
     return () => {
       alive = false;
+      window.removeEventListener("pointerdown", resumeMix);
+      window.removeEventListener("keydown", resumeMix);
       if (joinedRef.current) playLeaveSound();
       if (pingTimer) clearInterval(pingTimer);
       if (levelTimer) clearInterval(levelTimer);
       audioElsRef.current.clear();
       for (const [, a] of analysersRef.current) void a.ctx.close();
       analysersRef.current.clear();
-      for (const [, pb] of playbackCtxRef.current) void pb.ctx.close();
+      for (const [, pb] of playbackCtxRef.current) {
+        try {
+          pb.src.disconnect();
+          pb.mono.disconnect();
+        } catch {
+          /* ignore */
+        }
+      }
       playbackCtxRef.current.clear();
+      if (mixCtxRef.current) {
+        try {
+          void mixCtxRef.current.close();
+        } catch {
+          /* ignore */
+        }
+        mixCtxRef.current = null;
+      }
       tracksRef.current.clear();
       preTrackRef.current?.stop();
       preTrackRef.current = null;
@@ -839,9 +868,14 @@ export function VoiceRoom({
     const room = roomRef.current;
     if (!room) return;
     await room.startAudio();
-    playbackCtxRef.current.forEach((pb) => {
-      if (pb.ctx.state === "suspended") void pb.ctx.resume();
-    });
+    const ctx = mixCtxRef.current;
+    if (ctx && ctx.state === "suspended") {
+      try {
+        await ctx.resume();
+      } catch {
+        /* ignore */
+      }
+    }
     setAudioBlocked(!room.canPlaybackAudio);
   };
 
