@@ -17,14 +17,35 @@
     overflow: hidden;
   }
   header {
-    padding: 14px 18px;
-    font-size: 15px;
-    font-weight: 600;
+    padding: 12px 18px;
     border-bottom: 1px solid rgba(255,255,255,0.08);
     display: flex;
     align-items: center;
     justify-content: space-between;
     flex-shrink: 0;
+    gap: 12px;
+  }
+  .tabs {
+    display: flex;
+    gap: 6px;
+  }
+  .tab {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: rgba(245,245,247,0.7);
+    border-radius: 9px;
+    padding: 7px 16px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  .tab:hover { background: rgba(255,255,255,0.12); color: #fff; }
+  .tab.active {
+    background: rgba(255,255,255,0.16);
+    color: #fff;
+    border-color: rgba(255,255,255,0.22);
   }
   .close {
     background: none;
@@ -90,49 +111,86 @@
 </head>
 <body>
 <header>
-  <span>Что показать?</span>
+  <div class="tabs">
+    <button class="tab active" id="tab-screen" onclick="showTab('screen')">Экран</button>
+    <button class="tab" id="tab-window" onclick="showTab('window')">Окно</button>
+  </div>
   <button class="close" title="Отмена" onclick="cancel()">✕</button>
 </header>
 <div class="grid" id="grid"><div class="empty">Загрузка источников…</div></div>
 <script>
+  var currentTab = "screen";
+  var data = { screens: [], windows: [] };
+
+  function makeCard(s, label) {
+    var card = document.createElement("div");
+    card.className = "src";
+    card.title = label;
+    if (s.thumbnail) {
+      var img = document.createElement("img");
+      img.className = "thumb";
+      img.src = s.thumbnail;
+      card.appendChild(img);
+    } else {
+      var nt = document.createElement("div");
+      nt.className = "no-thumb";
+      nt.textContent = "Нет превью";
+      card.appendChild(nt);
+    }
+    var name = document.createElement("div");
+    name.className = "name";
+    name.textContent = label;
+    card.appendChild(name);
+    card.addEventListener("click", function () {
+      window.pickerAPI.select(s.id);
+    });
+    return card;
+  }
+
+  function render() {
+    var grid = document.getElementById("grid");
+    var list = currentTab === "screen" ? data.screens : data.windows;
+    if (!list || list.length === 0) {
+      grid.innerHTML =
+        currentTab === "screen"
+          ? '<div class="empty">Мониторы не найдены</div>'
+          : '<div class="empty">Открытые окна не найдены</div>';
+      return;
+    }
+    grid.innerHTML = "";
+    for (var i = 0; i < list.length; i++) {
+      var s = list[i];
+      var label =
+        currentTab === "screen"
+          ? "Монитор " + (i + 1) + (s.name ? " — " + s.name : "")
+          : s.name;
+      grid.appendChild(makeCard(s, label));
+    }
+  }
+
   async function load() {
-    const grid = document.getElementById("grid");
+    var grid = document.getElementById("grid");
     try {
-      const sources = await window.pickerAPI.list();
-      if (!sources || sources.length === 0) {
-        grid.innerHTML = '<div class="empty">Источники не найдены</div>';
-        return;
-      }
-      grid.innerHTML = "";
-      for (const s of sources) {
-        const card = document.createElement("div");
-        card.className = "src";
-        card.title = s.name;
-        if (s.thumbnail) {
-          const img = document.createElement("img");
-          img.className = "thumb";
-          img.src = s.thumbnail;
-          card.appendChild(img);
-        } else {
-          const nt = document.createElement("div");
-          nt.className = "no-thumb";
-          nt.textContent = "Нет превью";
-          card.appendChild(nt);
-        }
-        const name = document.createElement("div");
-        name.className = "name";
-        name.textContent = s.name;
-        card.appendChild(name);
-        card.addEventListener("click", () => window.pickerAPI.select(s.id));
-        grid.appendChild(card);
-      }
+      var res = await window.pickerAPI.list();
+      data.screens = res.screens || [];
+      data.windows = res.windows || [];
+      render();
     } catch (err) {
       grid.innerHTML = '<div class="empty">Не удалось получить источники</div>';
     }
   }
+
+  function showTab(tab) {
+    currentTab = tab;
+    document.getElementById("tab-screen").classList.toggle("active", tab === "screen");
+    document.getElementById("tab-window").classList.toggle("active", tab === "window");
+    render();
+  }
+
   function cancel() {
     window.pickerAPI.cancel();
   }
+
   load();
 </script>
 </body>

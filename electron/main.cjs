@@ -14,6 +14,7 @@ let splashWindow = null;
 let updateSkipped = false;
 let pickerWindow = null;
 let pendingDisplayPick = null;
+const pickerSources = new Map();
 
 function sendUpdateStatus(status) {
   if (splashWindow && !splashWindow.isDestroyed()) {
@@ -95,7 +96,13 @@ function setupDisplayMediaHandler() {
       pickerWindow = null;
       const cb = pendingDisplayPick;
       pendingDisplayPick = null;
-      if (cb) cb({});
+      if (cb) {
+        try {
+          cb({});
+        } catch {
+          /* ignore */
+        }
+      }
     });
   });
 }
@@ -187,28 +194,51 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle("picker:list", async () => {
-    const sources = await desktopCapturer.getSources({
-      types: ["screen", "window"],
+    const screens = await desktopCapturer.getSources({
+      types: ["screen"],
       thumbnailSize: { width: 320, height: 200 },
     });
-    return sources.map((s) => ({
-      id: s.id,
-      name: s.name,
-      thumbnail: s.thumbnail.isEmpty() ? null : s.thumbnail.toDataURL(),
-    }));
+    const windows = await desktopCapturer.getSources({
+      types: ["window"],
+      thumbnailSize: { width: 320, height: 200 },
+      fetchWindowIcons: true,
+    });
+    pickerSources.clear();
+    const fmt = (s) => {
+      pickerSources.set(s.id, s);
+      return {
+        id: s.id,
+        name: s.name,
+        thumbnail: s.thumbnail.isEmpty() ? null : s.thumbnail.toDataURL(),
+      };
+    };
+    return { screens: screens.map(fmt), windows: windows.map(fmt) };
   });
 
   ipcMain.handle("picker:select", (_e, id) => {
+    const source = pickerSources.get(id) ?? null;
     const cb = pendingDisplayPick;
     pendingDisplayPick = null;
-    if (cb) cb({ video: { id } });
+    if (cb) {
+      try {
+        cb(source ? { video: source } : {});
+      } catch {
+        /* ignore */
+      }
+    }
     if (pickerWindow && !pickerWindow.isDestroyed()) pickerWindow.close();
   });
 
   ipcMain.handle("picker:cancel", () => {
     const cb = pendingDisplayPick;
     pendingDisplayPick = null;
-    if (cb) cb({});
+    if (cb) {
+      try {
+        cb({});
+      } catch {
+        /* ignore */
+      }
+    }
     if (pickerWindow && !pickerWindow.isDestroyed()) pickerWindow.close();
   });
 

@@ -724,7 +724,7 @@ export function VoiceRoom({
       })
       .catch((err) => {
         const msg = err instanceof Error ? err.message : "";
-        if (!/notallowed|cancel|abort/i.test(msg)) {
+        if (!/notallowed|cancel|abort|dismiss|permission/i.test(msg)) {
           setError(msg || "Не удалось начать демонстрацию экрана");
         }
       })
