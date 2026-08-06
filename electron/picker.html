@@ -166,6 +166,7 @@
       <select id="fps">
         <option value="30">30 fps</option>
         <option value="60">60 fps</option>
+        <option value="90">90 fps</option>
       </select>
     </label>
   </div>
@@ -233,7 +234,7 @@
         document.getElementById("quality").value =
           res.prefs.quality === "720" ? "720" : "1080";
         document.getElementById("fps").value =
-          res.prefs.fps === 60 ? "60" : "30";
+          res.prefs.fps === 90 ? "90" : res.prefs.fps === 60 ? "60" : "30";
       }
       render();
     } catch (err) {

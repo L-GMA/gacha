@@ -233,7 +233,7 @@ app.whenReady().then(() => {
     if (prefs && typeof prefs === "object") {
       currentScreenPrefs = {
         quality: prefs.quality === "720" ? "720" : "1080",
-        fps: prefs.fps === 60 ? 60 : 30,
+        fps: prefs.fps === 90 ? 90 : prefs.fps === 60 ? 60 : 30,
       };
     }
     openPickerWindow();
@@ -273,7 +273,7 @@ app.whenReady().then(() => {
     if (source) {
       currentScreenPrefs = {
         quality: quality === "720" ? "720" : "1080",
-        fps: fps === 60 ? 60 : 30,
+        fps: fps === 90 ? 90 : fps === 60 ? 60 : 30,
       };
       pendingScreenSelection = { source };
     }

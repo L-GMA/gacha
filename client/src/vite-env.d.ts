@@ -16,7 +16,7 @@ interface Window {
   };
   gachaScreen?: {
     pick?: (prefs: { quality: string; fps: number }) => Promise<
-      { cancelled: true } | { quality: "720" | "1080"; fps: 30 | 60 }
+      { cancelled: true } | { quality: "720" | "1080"; fps: 30 | 60 | 90 }
     >;
   };
 }

@@ -4,8 +4,9 @@ import {
   RoomEvent,
   ConnectionState,
   Track,
+  LocalVideoTrack,
+  LocalAudioTrack,
   type RemoteParticipant,
-  type LocalAudioTrack,
 } from "livekit-client";
 import { api } from "../api.js";
 import { Avatar } from "./Avatar.js";
@@ -33,8 +34,10 @@ const isDesktopApp =
   typeof window !== "undefined" &&
   typeof window.gachaScreen?.pick === "function";
 
-const screenBitrate = (fps: 30 | 60): number =>
-  fps === 60 ? 8_000_000 : 5_000_000;
+const screenBitrate = (fps: 30 | 60 | 90, quality: "720" | "1080"): number => {
+  const base = quality === "1080" ? 8_000_000 : 5_000_000;
+  return Math.round(base * (fps / 30));
+};
 
 function MicIcon() {
   return (
@@ -195,9 +198,10 @@ export function VoiceRoom({
   const [screenRes, setScreenRes] = useState<"720" | "1080">(() =>
     readScreenPref("res", "1080") === "720" ? "720" : "1080",
   );
-  const [screenFps, setScreenFps] = useState<30 | 60>(() =>
-    readScreenPref("fps", "30") === "60" ? 60 : 30,
-  );
+  const [screenFps, setScreenFps] = useState<30 | 60 | 90>(() => {
+    const v = readScreenPref("fps", "30");
+    return v === "90" ? 90 : v === "60" ? 60 : 30;
+  });
   const [screens, setScreens] = useState<
     { identity: string; track: Track; isMe: boolean }[]
   >([]);
@@ -222,6 +226,9 @@ export function VoiceRoom({
   const prevSpeakingRef = useRef<string[]>([]);
   const screensRef = useRef<Map<string, Track>>(new Map());
   const screenBusyRef = useRef(false);
+  const screenCaptureRef = useRef<{
+    stop: () => void;
+  } | null>(null);
 
   const volumeStorageKey = (name: string) => `gacha.voice.volumes.${name}`;
 
@@ -871,7 +878,8 @@ export function VoiceRoom({
       preTrackRef.current?.stop();
       preTrackRef.current = null;
       if (room) {
-        void room.localParticipant.setScreenShareEnabled(false).catch(() => {});
+        screenCaptureRef.current?.stop();
+        screenCaptureRef.current = null;
       }
       for (const [, t] of screensRef.current) {
         for (const el of t.detach()) el.remove();
@@ -980,39 +988,107 @@ export function VoiceRoom({
     if (!room || screenBusyRef.current) return;
     screenBusyRef.current = true;
     if (sharingScreen) {
-      void room.localParticipant
-        .setScreenShareEnabled(false)
-        .catch(() => {})
-        .finally(() => {
-          screenBusyRef.current = false;
-        });
+      screenCaptureRef.current?.stop();
+      screenCaptureRef.current = null;
+      screenBusyRef.current = false;
       return;
     }
-    const start = (quality: "720" | "1080", fps: 30 | 60) => {
+    const start = async (quality: "720" | "1080", fps: 30 | 60 | 90) => {
       writeScreenPref("res", quality);
       writeScreenPref("fps", String(fps));
       const width = quality === "1080" ? 1920 : 1280;
       const height = quality === "1080" ? 1080 : 720;
-      void room.localParticipant
-        .setScreenShareEnabled(
-          true,
-          { resolution: { width, height, frameRate: fps }, audio: true },
-          {
-            videoEncoding: {
-              maxBitrate: screenBitrate(fps),
-              maxFramerate: fps,
-            },
-          },
-        )
-        .catch((err) => {
-          const msg = err instanceof Error ? err.message : "";
-          if (!/notallowed|cancel|abort|dismiss|permission/i.test(msg)) {
-            setError(msg || "Не удалось начать демонстрацию экрана");
-          }
-        })
-        .finally(() => {
-          screenBusyRef.current = false;
+      try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: { frameRate: { ideal: fps } },
+          audio: true,
         });
+        if (!roomRef.current) {
+          for (const t of stream.getTracks()) t.stop();
+          return;
+        }
+        const rawVideo = stream.getVideoTracks()[0] ?? null;
+        const rawAudio = stream.getAudioTracks()[0] ?? null;
+        if (!rawVideo) {
+          for (const t of stream.getTracks()) t.stop();
+          return;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const gctx = canvas.getContext("2d");
+        const videoEl = document.createElement("video");
+        videoEl.muted = true;
+        videoEl.playsInline = true;
+        videoEl.srcObject = new MediaStream([rawVideo]);
+        await videoEl.play().catch(() => {});
+        let running = true;
+        let raf = 0;
+        const frameMs = 1000 / fps;
+        let lastDraw = 0;
+        const draw = (t: number) => {
+          if (!running) return;
+          raf = requestAnimationFrame(draw);
+          if (t - lastDraw < frameMs) return;
+          lastDraw = t;
+          try {
+            gctx?.drawImage(videoEl, 0, 0, width, height);
+          } catch {
+            /* ignore */
+          }
+        };
+        raf = requestAnimationFrame(draw);
+        const outStream = canvas.captureStream(0);
+        const outVideo = outStream.getVideoTracks()[0];
+        const localVideo = new LocalVideoTrack(outVideo);
+        const localAudio = rawAudio ? new LocalAudioTrack(rawAudio) : null;
+        await room.localParticipant.publishTrack(localVideo, {
+          source: Track.Source.ScreenShare,
+          name: "screen",
+          simulcast: false,
+          videoEncoding: {
+            maxBitrate: screenBitrate(fps, quality),
+            maxFramerate: fps,
+          },
+        });
+        if (localAudio) {
+          await room.localParticipant.publishTrack(localAudio, {
+            source: Track.Source.ScreenShareAudio,
+            name: "screen-audio",
+          });
+        }
+        if (!roomRef.current) {
+          running = false;
+          cancelAnimationFrame(raf);
+          localVideo.stop();
+          localAudio?.stop();
+          for (const t of stream.getTracks()) t.stop();
+          return;
+        }
+        screenCaptureRef.current = {
+          stop: () => {
+            if (!running) return;
+            running = false;
+            cancelAnimationFrame(raf);
+            void room.localParticipant.unpublishTrack(localVideo).catch(() => {});
+            if (localAudio)
+              void room.localParticipant
+                .unpublishTrack(localAudio)
+                .catch(() => {});
+            localVideo.stop();
+            localAudio?.stop();
+            videoEl.srcObject = null;
+            for (const t of stream.getTracks()) t.stop();
+          },
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "";
+        if (!/notallowed|cancel|abort|dismiss|permission/i.test(msg)) {
+          setError(msg || "Не удалось начать демонстрацию экрана");
+        }
+      } finally {
+        screenBusyRef.current = false;
+      }
     };
     if (isDesktopApp) {
       const pick = window.gachaScreen?.pick;
@@ -1025,14 +1101,14 @@ export function VoiceRoom({
           }
           setScreenRes(res.quality);
           setScreenFps(res.fps);
-          start(res.quality, res.fps);
+          void start(res.quality, res.fps);
         })
         .catch(() => {
           screenBusyRef.current = false;
         });
       return;
     }
-    start(screenRes, screenFps);
+    void start(screenRes, screenFps);
   };
 
   const leave = () => {
@@ -1254,11 +1330,14 @@ export function VoiceRoom({
                 className="pv-qsel"
                 value={String(screenFps)}
                 disabled={sharingScreen}
-                onChange={(e) => setScreenFps(Number(e.target.value) as 30 | 60)}
+                onChange={(e) =>
+                  setScreenFps(Number(e.target.value) as 30 | 60 | 90)
+                }
                 title="Частота кадров"
               >
                 <option value="30">30 fps</option>
                 <option value="60">60 fps</option>
+                <option value="90">90 fps</option>
               </select>
             </div>
           )}
