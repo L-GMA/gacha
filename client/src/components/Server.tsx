@@ -12,8 +12,10 @@ import { NewDmModal } from "./NewDmModal.js";
 import { InviteModal } from "./InviteModal.js";
 import { SettingsModal } from "./SettingsModal.js";
 import { ProfileModal } from "./ProfileModal.js";
+import { UserSettings } from "./UserSettings.js";
 import { highestRoleColor } from "../roleColor.js";
 import { Avatar } from "./Avatar.js";
+import { getSettings } from "../settings.js";
 
 export function Server({
   invitedBy,
@@ -26,6 +28,7 @@ export function Server({
   const [passVoice, setPassVoice] = useState<PassVoiceChannel[]>([]);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [userSettingsOpen, setUserSettingsOpen] = useState(false);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [profileEdit, setProfileEdit] = useState(false);
   const [dmOpen, setDmOpen] = useState(false);
@@ -138,9 +141,10 @@ export function Server({
 
   const preCaptureMic = () => {
     const prev = micTrackRef.current.promise;
+    const deviceId = getSettings().micDeviceId;
     micTrackRef.current = {
       promise: navigator.mediaDevices
-        .getUserMedia({ audio: true })
+        .getUserMedia(deviceId ? { audio: { deviceId } } : { audio: true })
         .then((s) => s.getAudioTracks()[0] ?? null)
         .catch(() => null),
     };
@@ -448,7 +452,7 @@ export function Server({
           <button
             className="user-panel-btn"
             title="Настройки"
-            onClick={() => openProfile(true)}
+            onClick={() => setUserSettingsOpen(true)}
           >
             <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="3" />
@@ -476,6 +480,13 @@ export function Server({
       {settingsOpen && (
         <SettingsModal
           onClose={() => setSettingsOpen(false)}
+          onChanged={() => load()}
+        />
+      )}
+      {userSettingsOpen && (
+        <UserSettings
+          me={data.me}
+          onClose={() => setUserSettingsOpen(false)}
           onChanged={() => load()}
         />
       )}

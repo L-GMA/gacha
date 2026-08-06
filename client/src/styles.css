@@ -3036,3 +3036,202 @@ input:focus {
   background: rgba(255, 92, 92, 0.24);
   color: #ffffff;
 }
+
+/* ============ user settings (Discord-style page) ============ */
+
+.user-settings {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  background: #313338;
+}
+
+.us-nav {
+  width: 218px;
+  flex-shrink: 0;
+  background: #1e1f22;
+  padding: 16px 8px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.us-nav-head {
+  padding: 6px 10px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: rgba(245, 245, 247, 0.35);
+}
+
+.us-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(245, 245, 247, 0.6);
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, color 0.15s;
+}
+
+.us-nav-item svg {
+  flex-shrink: 0;
+}
+
+.us-nav-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(245, 245, 247, 0.9);
+}
+
+.us-nav-item.active {
+  background: #404249;
+  color: #ffffff;
+}
+
+.us-nav-version {
+  margin-top: auto;
+  padding: 12px 10px 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 12px;
+  color: rgba(245, 245, 247, 0.35);
+}
+
+.us-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.us-content-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.us-content-head h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #f5f5f7;
+}
+
+.us-content-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 20px 32px;
+  max-width: 680px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.us-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.us-profile {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.us-profile-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 8px;
+}
+
+.us-profile-hero-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.us-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.us-saved {
+  margin: 0;
+  font-size: 13px;
+  color: #23a55a;
+}
+
+.us-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.us-setting-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.us-setting-text span {
+  font-size: 14px;
+  color: rgba(245, 245, 247, 0.9);
+}
+
+.us-setting-text small {
+  font-size: 12px;
+  color: rgba(245, 245, 247, 0.45);
+}
+
+.us-select {
+  height: 36px;
+  padding: 0 10px;
+  font-size: 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: rgba(255, 255, 255, 0.06);
+  color: #f5f5f7;
+  font-family: inherit;
+}
+
+.us-select:focus {
+  outline: none;
+  border-color: rgba(245, 245, 247, 0.45);
+}
+
+.cam-preview {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  background: #1e1f22;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cam-preview video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}

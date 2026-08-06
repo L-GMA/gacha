@@ -1,5 +1,10 @@
+import { readFileSync } from "node:fs";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+
+const ROOT_PKG = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")) as {
+  version: string;
+};
 
 const CSP_WEB = [
   "default-src 'self'",
@@ -51,6 +56,9 @@ function cspPlugin(mode: string): Plugin {
 
 export default defineConfig(({ mode }) => ({
   plugins: [react(), cspPlugin(mode)],
+  define: {
+    __APP_VERSION__: JSON.stringify(ROOT_PKG.version),
+  },
   base: mode === "desktop" ? "./" : "/",
   server: {
     port: 5173,

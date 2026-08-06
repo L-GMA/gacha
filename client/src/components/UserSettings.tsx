@@ -1,0 +1,359 @@
+import { useEffect, useRef, useState } from "react";
+import { api, type User } from "../api.js";
+import { highestRoleColor } from "../roleColor.js";
+import { Avatar } from "./Avatar.js";
+import { Toggle } from "./Toggle.js";
+import { getSettings, setSetting, subscribeSettings } from "../settings.js";
+
+type SectionId = "profile" | "sound" | "camera" | "notifications";
+
+const SECTIONS: { id: SectionId; label: string }[] = [
+  { id: "profile", label: "Настройка профиля" },
+  { id: "sound", label: "Настройка звука" },
+  { id: "camera", label: "Настройка камеры" },
+  { id: "notifications", label: "Уведомления" },
+];
+
+function SectionIcon({ id }: { id: SectionId }) {
+  switch (id) {
+    case "profile":
+      return (
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+          <circle cx="12" cy="7" r="4" />
+        </svg>
+      );
+    case "sound":
+      return (
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M11 5 6 9H2v6h4l5 4V5Z" />
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+        </svg>
+      );
+    case "camera":
+      return (
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M23 7 16 12v6l7 5V7Z" />
+          <rect x="1" y="5" width="15" height="14" rx="2" />
+        </svg>
+      );
+    case "notifications":
+      return (
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+      );
+  }
+}
+
+export function UserSettings({
+  me,
+  onClose,
+  onChanged,
+}: {
+  me: User;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [section, setSection] = useState<SectionId>("profile");
+  const current = SECTIONS.find((s) => s.id === section)!;
+
+  return (
+    <div className="user-settings">
+      <aside className="us-nav">
+        <div className="us-nav-head">Пользовательские настройки</div>
+        {SECTIONS.map((s) => (
+          <button
+            key={s.id}
+            className={`us-nav-item ${section === s.id ? "active" : ""}`}
+            onClick={() => setSection(s.id)}
+          >
+            <SectionIcon id={s.id} />
+            <span>{s.label}</span>
+          </button>
+        ))}
+        <AppVersion />
+      </aside>
+      <section className="us-content">
+        <header className="us-content-head">
+          <h2>{current.label}</h2>
+          <button className="icon-btn" title="Закрыть" onClick={onClose}>
+            ×
+          </button>
+        </header>
+        <div className="us-content-body">
+          {section === "profile" && <ProfileSection me={me} onChanged={onChanged} />}
+          {section === "sound" && <SoundSection />}
+          {section === "camera" && <CameraSection />}
+          {section === "notifications" && <NotificationsSection />}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function AppVersion() {
+  const [version, setVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (window.desktop?.getVersion) {
+      window.desktop.getVersion().then(setVersion).catch(() => setVersion(__APP_VERSION__));
+    } else {
+      setVersion(__APP_VERSION__);
+    }
+  }, []);
+
+  if (!version) return null;
+  return <div className="us-nav-version">Версия {version}</div>;
+}
+
+function ProfileSection({ me, onChanged }: { me: User; onChanged: () => void }) {
+  const [nickname, setNickname] = useState(me.nickname ?? "");
+  const [avatar, setAvatar] = useState(me.avatar ?? "");
+  const [bio, setBio] = useState(me.bio ?? "");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setNickname(me.nickname ?? "");
+    setAvatar(me.avatar ?? "");
+    setBio(me.bio ?? "");
+  }, [me]);
+
+  const roleColor = highestRoleColor(me.roles);
+  const displayName = nickname.trim() || me.login;
+
+  const save = async () => {
+    setError("");
+    setSaving(true);
+    setSaved(false);
+    try {
+      await api.updateMe(nickname.trim() || null, avatar.trim() || null, bio.trim() || null);
+      onChanged();
+      setSaved(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="us-profile">
+      <div className="us-profile-hero">
+        <Avatar src={avatar.trim() || me.avatar} name={displayName} size={88} online={me.online} />
+        <div className="us-profile-hero-info">
+          <span className="profile-nick" style={roleColor ? { color: roleColor } : undefined}>
+            {displayName}
+          </span>
+          <span className="profile-login">@{me.login}</span>
+        </div>
+      </div>
+
+      <label className="field">
+        <span>Ник</span>
+        <input value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder={me.login} maxLength={32} />
+      </label>
+      <label className="field">
+        <span>Аватар (ссылка на картинку)</span>
+        <input value={avatar} onChange={(e) => setAvatar(e.target.value)} placeholder="https://…" />
+      </label>
+      <label className="field">
+        <span>О себе (до 50 символов)</span>
+        <input value={bio} onChange={(e) => setBio(e.target.value)} placeholder="Кратко о себе…" maxLength={50} />
+        <span className="field-counter">{bio.length}/50</span>
+      </label>
+
+      {error && <p className="error">{error}</p>}
+      {saved && <p className="us-saved">Изменения сохранены</p>}
+      <div className="us-actions">
+        <button className="btn primary" disabled={saving} onClick={save}>
+          {saving ? "Сохранение…" : "Сохранить"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function useDevices(kind: "audioinput" | "videoinput"): MediaDeviceInfo[] {
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  useEffect(() => {
+    let alive = true;
+    navigator.mediaDevices
+      .enumerateDevices()
+      .then((ds) => {
+        if (alive) setDevices(ds.filter((d) => d.kind === kind));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [kind]);
+  return devices;
+}
+
+function DeviceSelect({
+  label,
+  devices,
+  value,
+  onChange,
+}: {
+  label: string;
+  devices: MediaDeviceInfo[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <select className="us-select" value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">Системное устройство по умолчанию</option>
+        {devices.map((d) => (
+          <option key={d.deviceId} value={d.deviceId}>
+            {d.label || `Устройство (${d.deviceId.slice(0, 8)}…)`}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function SoundSection() {
+  const [settings, setLocal] = useState(getSettings());
+  const mics = useDevices("audioinput");
+
+  useEffect(() => subscribeSettings(() => setLocal(getSettings())), []);
+
+  return (
+    <div className="us-stack">
+      <div className="us-setting-row">
+        <div className="us-setting-text">
+          <span>Звуки входа и выхода из голосового канала</span>
+          <small>Короткие звуковые сигналы при подключении/отключении участников</small>
+        </div>
+        <Toggle checked={settings.sounds} onChange={(v) => setSetting("sounds", v)} label="Звуки" />
+      </div>
+      <DeviceSelect
+        label="Микрофон"
+        devices={mics}
+        value={settings.micDeviceId}
+        onChange={(id) => setSetting("micDeviceId", id)}
+      />
+      <p className="hint">Смена микрофона применится после повторного входа в голосовой канал.</p>
+    </div>
+  );
+}
+
+function CameraPreview({ deviceId }: { deviceId: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    let stream: MediaStream | null = null;
+    navigator.mediaDevices
+      .getUserMedia({ video: deviceId ? { deviceId } : true, audio: false })
+      .then((s) => {
+        if (!alive) {
+          for (const t of s.getTracks()) t.stop();
+          return;
+        }
+        stream = s;
+        if (videoRef.current) {
+          videoRef.current.srcObject = s;
+          void videoRef.current.play().catch(() => {});
+        }
+      })
+      .catch(() => {
+        if (alive) setError("Нет доступа к камере. Разрешите доступ в браузере.");
+      });
+    return () => {
+      alive = false;
+      stream?.getTracks().forEach((t) => t.stop());
+    };
+  }, [deviceId]);
+
+  return (
+    <div className="cam-preview">
+      {error ? (
+        <p className="hint">{error}</p>
+      ) : (
+        <video ref={videoRef} muted playsInline />
+      )}
+    </div>
+  );
+}
+
+function CameraSection() {
+  const [settings, setLocal] = useState(getSettings());
+  const cams = useDevices("videoinput");
+
+  useEffect(() => subscribeSettings(() => setLocal(getSettings())), []);
+
+  return (
+    <div className="us-stack">
+      <CameraPreview deviceId={settings.cameraDeviceId} />
+      <DeviceSelect
+        label="Камера"
+        devices={cams}
+        value={settings.cameraDeviceId}
+        onChange={(id) => setSetting("cameraDeviceId", id)}
+      />
+      <p className="hint">Видеозвонки и трансляция появятся позже — пока можно проверить камеру и выбрать устройство.</p>
+    </div>
+  );
+}
+
+function NotificationsSection() {
+  const [settings, setLocal] = useState(getSettings());
+  const [perm, setPerm] = useState<string>(
+    typeof Notification !== "undefined" ? Notification.permission : "unsupported",
+  );
+
+  useEffect(() => subscribeSettings(() => setLocal(getSettings())), []);
+
+  const requestPermission = async () => {
+    if (typeof Notification === "undefined") return;
+    try {
+      const p = await Notification.requestPermission();
+      setPerm(p);
+    } catch {
+      /* не поддерживается */
+    }
+  };
+
+  return (
+    <div className="us-stack">
+      <div className="us-setting-row">
+        <div className="us-setting-text">
+          <span>Уведомления о новых сообщениях</span>
+          <small>Показывать системные уведомления, когда приходят сообщения</small>
+        </div>
+        <Toggle checked={settings.notifications} onChange={(v) => setSetting("notifications", v)} label="Уведомления" />
+      </div>
+
+      {typeof Notification !== "undefined" && (
+        <div className="us-setting-row">
+          <div className="us-setting-text">
+            <span>Разрешение браузера</span>
+            <small>
+              {perm === "granted"
+                ? "Уведомления разрешены"
+                : perm === "denied"
+                  ? "Уведомления заблокированы браузером"
+                  : "Разрешение ещё не выдано"}
+            </small>
+          </div>
+          {perm !== "granted" && perm !== "denied" && (
+            <button className="btn small" onClick={requestPermission}>
+              Разрешить
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

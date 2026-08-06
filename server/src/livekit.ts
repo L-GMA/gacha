@@ -19,7 +19,11 @@ export function issueLiveKitToken(opts: LiveKitTokenOptions): string {
     name: opts.name ?? opts.identity,
     nbf: now - 10,
     exp: now + ttl,
-    video: { room: opts.room, roomJoin: true },
+    video: {
+      room: opts.room,
+      roomJoin: true,
+      canUpdateOwnMetadata: true,
+    },
   };
   const headerB64 = Buffer.from(JSON.stringify(header)).toString("base64url");
   const payloadB64 = Buffer.from(JSON.stringify(payload)).toString("base64url");

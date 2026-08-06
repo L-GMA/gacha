@@ -1,3 +1,5 @@
+import { getSettings } from "./settings.js";
+
 declare global {
   interface Window {
     __gachaJoinSounds?: number;
@@ -9,12 +11,14 @@ const makePlayer = (src: string, key: "join" | "leave") => {
   let el: HTMLAudioElement | null = null;
   return () => {
     try {
-      if (!el) {
-        el = new Audio(src);
-        el.preload = "auto";
+      if (getSettings().sounds) {
+        if (!el) {
+          el = new Audio(src);
+          el.preload = "auto";
+        }
+        el.currentTime = 0;
+        void el.play().catch(() => {});
       }
-      el.currentTime = 0;
-      void el.play().catch(() => {});
     } catch {
       /* звук некритичен */
     }
