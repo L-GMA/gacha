@@ -3,8 +3,11 @@ import {
   KrispNoiseFilter,
   isKrispNoiseFilterSupported,
 } from "@livekit/krisp-noise-filter";
+import type { KrispQuality } from "./settings.js";
 
 let supported: boolean | null = null;
+
+const appliedQuality = new WeakMap<LocalAudioTrack, KrispQuality>();
 
 export function isKrispSupported(): boolean {
   if (supported === null) {
@@ -22,16 +25,20 @@ export function isKrispSupported(): boolean {
 
 export async function applyKrisp(
   track: LocalAudioTrack | undefined | null,
-  enable: boolean,
+  enabled: boolean,
+  quality: KrispQuality,
 ): Promise<void> {
   if (!track) return;
   try {
-    if (enable && isKrispSupported()) {
-      if (track.getProcessor()) return;
-      await track.setProcessor(KrispNoiseFilter({ quality: "medium" }));
-    } else if (track.getProcessor()) {
-      await track.stopProcessor();
+    if (!enabled || !isKrispSupported()) {
+      if (track.getProcessor()) await track.stopProcessor();
+      appliedQuality.delete(track);
+      return;
     }
+    if (track.getProcessor() && appliedQuality.get(track) === quality) return;
+    if (track.getProcessor()) await track.stopProcessor();
+    await track.setProcessor(KrispNoiseFilter({ quality }));
+    appliedQuality.set(track, quality);
   } catch (err) {
     console.warn("[krisp] обработка шума не применилась:", err);
   }

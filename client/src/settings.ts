@@ -1,3 +1,5 @@
+export type KrispQuality = "low" | "medium" | "high";
+
 export type UserSettings = {
   sounds: boolean;
   notifications: boolean;
@@ -5,6 +7,7 @@ export type UserSettings = {
   cameraDeviceId: string;
   micGain: number;
   krisp: boolean;
+  krispQuality: KrispQuality;
 };
 
 const KEY = "gacha.settings";
@@ -15,6 +18,7 @@ const DEFAULTS: UserSettings = {
   cameraDeviceId: "",
   micGain: 1,
   krisp: true,
+  krispQuality: "medium",
 };
 
 let current: UserSettings = (() => {

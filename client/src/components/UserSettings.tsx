@@ -389,6 +389,22 @@ function SoundSection() {
           </div>
           <Toggle checked={settings.krisp} onChange={(v) => setSetting("krisp", v)} label="Krisp" />
         </div>
+        <div className="us-setting-row">
+          <div className="us-setting-text">
+            <span>Степень подавления шума</span>
+            <small>Максимальная чистит сильнее, но нагружает процессор</small>
+          </div>
+          <select
+            className="us-select"
+            value={settings.krispQuality}
+            disabled={!settings.krisp}
+            onChange={(e) => setSetting("krispQuality", e.target.value as "low" | "medium" | "high")}
+          >
+            <option value="low">Экономная</option>
+            <option value="medium">Стандартная</option>
+            <option value="high">Максимальная</option>
+          </select>
+        </div>
       </div>
       <p className="hint">Смена микрофона применится после повторного входа в голосовой канал. Усиление слышно собеседникам сразу.</p>
     </div>
