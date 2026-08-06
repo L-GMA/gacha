@@ -146,6 +146,22 @@ export function VoiceRoom({
   micTrackRef?: { current: { promise: Promise<MediaStreamTrack | null> } };
   hideHead?: boolean;
 }) {
+  const readScreenPref = (key: string, fallback: string): string => {
+    try {
+      return localStorage.getItem(`gacha.voice.screen.${key}`) ?? fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
+  const writeScreenPref = (key: string, v: string) => {
+    try {
+      localStorage.setItem(`gacha.voice.screen.${key}`, v);
+    } catch {
+      /* ignore */
+    }
+  };
+
   const [participants, setParticipants] = useState<RemoteParticipant[]>([]);
   const [speakingIds, setSpeakingIds] = useState<string[]>([]);
   const [meIdentity, setMeIdentity] = useState<string | null>(null);
@@ -201,22 +217,6 @@ export function VoiceRoom({
   const writeStoredVolume = (name: string, v: number) => {
     try {
       localStorage.setItem(volumeStorageKey(name), String(v));
-    } catch {
-      /* ignore */
-    }
-  };
-
-  const readScreenPref = (key: string, fallback: string): string => {
-    try {
-      return localStorage.getItem(`gacha.voice.screen.${key}`) ?? fallback;
-    } catch {
-      return fallback;
-    }
-  };
-
-  const writeScreenPref = (key: string, v: string) => {
-    try {
-      localStorage.setItem(`gacha.voice.screen.${key}`, v);
     } catch {
       /* ignore */
     }
