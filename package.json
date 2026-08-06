@@ -38,6 +38,10 @@
         "repo": "gacha"
       }
     ],
+    "releaseInfo": {
+      "draft": false,
+      "prerelease": false
+    },
     "win": {
       "target": [
         { "target": "nsis", "arch": ["x64"] }
