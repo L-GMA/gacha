@@ -1,6 +1,6 @@
 {
   "name": "gacha-desktop",
-  "version": "0.5.20",
+  "version": "0.5.21",
   "private": true,
   "description": "GACHA desktop app",
   "author": "goowesh",
@@ -43,6 +43,12 @@
       "target": [
         { "target": "nsis", "arch": ["x64"] }
       ]
+    },
+    "mac": {
+      "target": ["dmg"],
+      "extendInfo": {
+        "NSAudioCaptureUsageDescription": "GACHA использует доступ к записи звука для трансляции системного аудио в голосовых каналах."
+      }
     },
     "nsis": {
       "oneClick": true,

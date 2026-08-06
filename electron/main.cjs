@@ -113,7 +113,7 @@ function setupDisplayMediaHandler() {
       const sel = pendingScreenSelection;
       pendingScreenSelection = null;
       try {
-        callback({ video: sel.source });
+        callback({ video: sel.source, audio: "loopback" });
       } catch {
         /* ignore */
       }
@@ -126,7 +126,7 @@ function setupDisplayMediaHandler() {
       });
       if (sources.length > 0) {
         try {
-          callback({ video: sources[0] });
+          callback({ video: sources[0], audio: "loopback" });
         } catch {
           /* ignore */
         }

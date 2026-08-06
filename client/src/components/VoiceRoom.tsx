@@ -1071,11 +1071,9 @@ export function VoiceRoom({
           for (const t of stream.getTracks()) t.stop();
           return;
         }
-        // Звук трансляции: в вебе getDisplayMedia может отдать звук таба/системы —
-        // публикуем его отдельным треком. В Electron getDisplayMedia отдаёт только
-        // видео, а системное аудио через chromeMediaSource крашит рендерер
-        // (известный баг Chromium/Electron, "reason 263"), поэтому на десктопе
-        // демонстрация идёт без звука.
+        // Звук трансляции публикуется отдельным треком. В вебе getDisplayMedia
+        // может отдать звук таба/системы; в Electron главный процесс добавляет
+        // системный loopback (audio: "loopback" в setDisplayMediaRequestHandler).
         let localAudio: LocalAudioTrack | null = null;
         if (rawAudio) {
           localAudio = new LocalAudioTrack(rawAudio);
