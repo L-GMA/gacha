@@ -158,6 +158,12 @@ export function VoiceRoom({
   const [ping, setPing] = useState<number | null>(null);
   const [volumes, setVolumes] = useState<Record<string, number>>({});
   const [sharingScreen, setSharingScreen] = useState(false);
+  const [screenRes, setScreenRes] = useState<"720" | "1080">(() =>
+    readScreenPref("res", "1080") === "720" ? "720" : "1080",
+  );
+  const [screenFps, setScreenFps] = useState<30 | 60>(() =>
+    readScreenPref("fps", "30") === "60" ? 60 : 30,
+  );
   const [screens, setScreens] = useState<
     { identity: string; track: Track; isMe: boolean }[]
   >([]);
@@ -195,6 +201,22 @@ export function VoiceRoom({
   const writeStoredVolume = (name: string, v: number) => {
     try {
       localStorage.setItem(volumeStorageKey(name), String(v));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const readScreenPref = (key: string, fallback: string): string => {
+    try {
+      return localStorage.getItem(`gacha.voice.screen.${key}`) ?? fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
+  const writeScreenPref = (key: string, v: string) => {
+    try {
+      localStorage.setItem(`gacha.voice.screen.${key}`, v);
     } catch {
       /* ignore */
     }
@@ -683,9 +705,29 @@ export function VoiceRoom({
     const room = roomRef.current;
     if (!room || screenBusyRef.current) return;
     screenBusyRef.current = true;
+    if (sharingScreen) {
+      void room.localParticipant
+        .setScreenShareEnabled(false)
+        .catch(() => {})
+        .finally(() => {
+          screenBusyRef.current = false;
+        });
+      return;
+    }
+    writeScreenPref("res", screenRes);
+    writeScreenPref("fps", String(screenFps));
+    const width = screenRes === "1080" ? 1920 : 1280;
+    const height = screenRes === "1080" ? 1080 : 720;
     void room.localParticipant
-      .setScreenShareEnabled(!sharingScreen)
-      .catch(() => {})
+      .setScreenShareEnabled(true, {
+        resolution: { width, height, frameRate: screenFps },
+      })
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : "";
+        if (!/notallowed|cancel|abort/i.test(msg)) {
+          setError(msg || "Не удалось начать демонстрацию экрана");
+        }
+      })
       .finally(() => {
         screenBusyRef.current = false;
       });
@@ -715,6 +757,10 @@ export function VoiceRoom({
 
   const meSpeaking = meIdentity ? speakingIds.includes(meIdentity) : false;
 
+  const screenByIdentity = new Map<string, Track>();
+  for (const s of screens) screenByIdentity.set(s.identity, s.track);
+  const meScreen = meIdentity ? screenByIdentity.get(meIdentity) : undefined;
+
   return (
     <div className="pv-room voice-room">
       {!hideHead && (
@@ -728,18 +774,26 @@ export function VoiceRoom({
 
       <div className="pv-members">
         <div className={`pv-member ${meSpeaking ? "speaking" : ""}`}>
-          <Avatar src={meAvatar} name={meName} size={40} online />
-          <span className="pv-member-name">{meName}</span>
-          <span className="pv-member-owner">вы</span>
-          {muted && (
-            <span className="pv-member-ico" title="Микрофон выключен">
-              <MicOffMiniIcon />
-            </span>
-          )}
-          {deafened && (
-            <span className="pv-member-ico" title="Оглушён">
-              <DeafenOffMiniIcon />
-            </span>
+          <div className="pv-member-row">
+            <Avatar src={meAvatar} name={meName} size={40} online />
+            <span className="pv-member-name">{meName}</span>
+            <span className="pv-member-owner">вы</span>
+            {muted && (
+              <span className="pv-member-ico" title="Микрофон выключен">
+                <MicOffMiniIcon />
+              </span>
+            )}
+            {deafened && (
+              <span className="pv-member-ico" title="Оглушён">
+                <DeafenOffMiniIcon />
+              </span>
+            )}
+          </div>
+          {meScreen && (
+            <div className="pv-member-screen">
+              <ScreenShareView track={meScreen} muted={true} />
+              <span className="pv-member-screen-label">Ваш экран</span>
+            </div>
           )}
         </div>
         {participants.length === 0 && (
@@ -748,62 +802,54 @@ export function VoiceRoom({
         {participants.map((p) => {
           const name = p.name ?? p.identity;
           const vol = volumes[p.identity] ?? 1;
+          const screenTrack = screenByIdentity.get(p.identity);
           return (
             <div
               key={p.identity}
               className={`pv-member ${speakingIds.includes(p.identity) ? "speaking" : ""}`}
             >
-              <Avatar src={null} name={name} size={40} online />
-              <span className="pv-member-name">{name}</span>
-              {(!p.isMicrophoneEnabled || p.attributes?.gacha_muted === "1") && (
-                <span className="pv-member-ico" title="Микрофон выключен">
-                  <MicOffMiniIcon />
-                </span>
-              )}
-              {p.attributes?.gacha_deafened === "1" && (
-                <span className="pv-member-ico" title="Оглушён">
-                  <DeafenOffMiniIcon />
-                </span>
-              )}
-              <div className="pv-volume">
-                <input
-                  type="range"
-                  min={0}
-                  max={200}
-                  step={5}
-                  value={Math.round(vol * 100)}
-                  onChange={(e) =>
-                    setParticipantVolume(
-                      p.identity,
-                      name,
-                      Number(e.target.value) / 100,
-                    )
-                  }
-                  title={`Громкость ${name}`}
-                />
-                <span className="pv-volume-val">{Math.round(vol * 100)}%</span>
+              <div className="pv-member-row">
+                <Avatar src={null} name={name} size={40} online />
+                <span className="pv-member-name">{name}</span>
+                {(!p.isMicrophoneEnabled || p.attributes?.gacha_muted === "1") && (
+                  <span className="pv-member-ico" title="Микрофон выключен">
+                    <MicOffMiniIcon />
+                  </span>
+                )}
+                {p.attributes?.gacha_deafened === "1" && (
+                  <span className="pv-member-ico" title="Оглушён">
+                    <DeafenOffMiniIcon />
+                  </span>
+                )}
+                <div className="pv-volume">
+                  <input
+                    type="range"
+                    min={0}
+                    max={200}
+                    step={5}
+                    value={Math.round(vol * 100)}
+                    onChange={(e) =>
+                      setParticipantVolume(
+                        p.identity,
+                        name,
+                        Number(e.target.value) / 100,
+                      )
+                    }
+                    title={`Громкость ${name}`}
+                  />
+                  <span className="pv-volume-val">{Math.round(vol * 100)}%</span>
+                </div>
               </div>
+              {screenTrack && (
+                <div className="pv-member-screen">
+                  <ScreenShareView track={screenTrack} muted={deafened} />
+                  <span className="pv-member-screen-label">{name}</span>
+                </div>
+              )}
             </div>
           );
         })}
       </div>
-
-      {screens.length > 0 && (
-        <div className="pv-screens">
-          {screens.map((s) => {
-            const p = participants.find((x) => x.identity === s.identity);
-            const name = s.isMe
-              ? `${meName} — ваш экран`
-              : `${p?.name ?? s.identity} — экран`;
-            return (
-              <div className="pv-screen" key={s.identity}>
-                <ScreenShareView track={s.track} muted={s.isMe || deafened} />
-                <span className="pv-screen-label">{name}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
 
       {micUnavailable && (
         <p className="modal-note">
@@ -851,6 +897,28 @@ export function VoiceRoom({
           >
             <ScreenShareIcon />
           </button>
+          <div className="voice-ctl-selects">
+            <select
+              className="pv-qsel"
+              value={screenRes}
+              disabled={sharingScreen}
+              onChange={(e) => setScreenRes(e.target.value as "720" | "1080")}
+              title="Разрешение трансляции"
+            >
+              <option value="720">720p</option>
+              <option value="1080">1080p</option>
+            </select>
+            <select
+              className="pv-qsel"
+              value={String(screenFps)}
+              disabled={sharingScreen}
+              onChange={(e) => setScreenFps(Number(e.target.value) as 30 | 60)}
+              title="Частота кадров"
+            >
+              <option value="30">30 fps</option>
+              <option value="60">60 fps</option>
+            </select>
+          </div>
         </div>
         <button className="voice-ctl exit" onClick={leave} title="Покинуть канал">
           <LeaveIcon />

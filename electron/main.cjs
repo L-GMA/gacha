@@ -1,10 +1,19 @@
-const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const {
+  app,
+  BrowserWindow,
+  ipcMain,
+  shell,
+  desktopCapturer,
+  session,
+} = require("electron");
 const path = require("path");
 const { autoUpdater } = require("electron-updater");
 
 let mainWindow = null;
 let splashWindow = null;
 let updateSkipped = false;
+let pickerWindow = null;
+let pendingDisplayPick = null;
 
 function sendUpdateStatus(status) {
   if (splashWindow && !splashWindow.isDestroyed()) {
@@ -55,6 +64,40 @@ function openMainWindow() {
   });
 
   closeSplash();
+}
+
+function setupDisplayMediaHandler() {
+  session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
+    pendingDisplayPick = callback;
+    if (pickerWindow && !pickerWindow.isDestroyed()) {
+      pickerWindow.focus();
+      return;
+    }
+    pickerWindow = new BrowserWindow({
+      width: 760,
+      height: 520,
+      minWidth: 600,
+      minHeight: 360,
+      parent: mainWindow,
+      modal: true,
+      autoHideMenuBar: true,
+      backgroundColor: "#141517",
+      title: "Демонстрация экрана",
+      webPreferences: {
+        preload: path.join(__dirname, "picker-preload.cjs"),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+      },
+    });
+    pickerWindow.loadFile(path.join(__dirname, "picker.html"));
+    pickerWindow.on("closed", () => {
+      pickerWindow = null;
+      const cb = pendingDisplayPick;
+      pendingDisplayPick = null;
+      if (cb) cb({});
+    });
+  });
 }
 
 function createSplashWindow() {
@@ -142,6 +185,34 @@ app.whenReady().then(() => {
     updateSkipped = true;
     openMainWindow();
   });
+
+  ipcMain.handle("picker:list", async () => {
+    const sources = await desktopCapturer.getSources({
+      types: ["screen", "window"],
+      thumbnailSize: { width: 320, height: 200 },
+    });
+    return sources.map((s) => ({
+      id: s.id,
+      name: s.name,
+      thumbnail: s.thumbnail.isEmpty() ? null : s.thumbnail.toDataURL(),
+    }));
+  });
+
+  ipcMain.handle("picker:select", (_e, id) => {
+    const cb = pendingDisplayPick;
+    pendingDisplayPick = null;
+    if (cb) cb({ video: { id } });
+    if (pickerWindow && !pickerWindow.isDestroyed()) pickerWindow.close();
+  });
+
+  ipcMain.handle("picker:cancel", () => {
+    const cb = pendingDisplayPick;
+    pendingDisplayPick = null;
+    if (cb) cb({});
+    if (pickerWindow && !pickerWindow.isDestroyed()) pickerWindow.close();
+  });
+
+  setupDisplayMediaHandler();
 
   if (app.isPackaged || process.env.GACHA_SPLASH === "1") {
     createSplashWindow();
