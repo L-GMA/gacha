@@ -1,0 +1,9 @@
+node_modules/
+release/
+client/dist/
+client/tsconfig.tsbuildinfo
+server/dist/
+server/node_modules/
+*.log
+.DS_Store
+.env

@@ -1,0 +1,728 @@
+import { useEffect, useRef, useState } from "react";
+import {
+  Room,
+  RoomEvent,
+  ConnectionState,
+  Track,
+  type RemoteParticipant,
+} from "livekit-client";
+import { api } from "../api.js";
+import { Avatar } from "./Avatar.js";
+import { playJoinSound, playLeaveSound } from "../sounds.js";
+import { DeafenOffMiniIcon, MicOffMiniIcon } from "./stateIcons.js";
+
+type RemoteAudioTrackLike = {
+  setVolume(volume: number): void;
+  attachedElements: HTMLMediaElement[];
+};
+
+const SPEAKING_THRESHOLD = 0.02;
+const SPEAKING_HANG_MS = 350;
+
+function MicIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+      <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
+      <path d="M12 18v3" />
+    </svg>
+  );
+}
+
+function MicOffIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="1" y1="1" x2="23" y2="23" />
+      <path d="M9 9v3a3 3 0 0 0 5.12 2.12" />
+      <path d="M15 9.34V5a3 3 0 0 0-5.94-.6" />
+      <path d="M17 16.95A7 7 0 0 1 5 12v-2" />
+      <path d="M19 10v2a7 7 0 0 1-.11 1.23" />
+      <line x1="12" y1="19" x2="12" y2="23" />
+      <line x1="8" y1="23" x2="16" y2="23" />
+    </svg>
+  );
+}
+
+function DeafenIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 14v-2a9 9 0 0 1 18 0v2" />
+      <path d="M3 14a2 2 0 0 1 2-2h1v6H5a2 2 0 0 1-2-2v-2Z" />
+      <path d="M21 14a2 2 0 0 0-2-2h-1v6h1a2 2 0 0 0 2-2v-2Z" />
+    </svg>
+  );
+}
+
+function DeafenOffIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 14v-2a9 9 0 0 1 18 0v2" />
+      <path d="M3 14a2 2 0 0 1 2-2h1v6H5a2 2 0 0 1-2-2v-2Z" />
+      <path d="M21 14a2 2 0 0 0-2-2h-1v6h1a2 2 0 0 0 2-2v-2Z" />
+      <line x1="2" y1="2" x2="22" y2="22" />
+    </svg>
+  );
+}
+
+function ScreenShareIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="4" width="20" height="14" rx="2" />
+      <path d="M9 21h6" />
+      <path d="M12 18v-7" />
+      <path d="m9 14 3-3 3 3" />
+    </svg>
+  );
+}
+
+function LeaveIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <g transform="rotate(180 12 12)">
+        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92Z" />
+      </g>
+    </svg>
+  );
+}
+
+export type VoiceStatus = {
+  connected: boolean;
+  channelName: string;
+  ping: number | null;
+  muted: boolean;
+  deafened: boolean;
+};
+
+export type VoiceControls = {
+  toggleMic: () => void;
+  toggleDeafen: () => void;
+  leave: () => void;
+};
+
+export type ParticipantVoiceState = {
+  muted: boolean;
+  deafened: boolean;
+};
+
+export function VoiceRoom({
+  channelId,
+  channelName,
+  meName,
+  meAvatar,
+  onLeave,
+  onStatus,
+  onSpeaking,
+  onParticipants,
+  controlsRef,
+  micTrackRef,
+  hideHead,
+}: {
+  channelId: string;
+  channelName: string;
+  meName: string;
+  meAvatar: string | null;
+  onLeave: () => void;
+  onStatus?: (status: VoiceStatus | null) => void;
+  onSpeaking?: (ids: string[]) => void;
+  onParticipants?: (states: Record<string, ParticipantVoiceState>) => void;
+  controlsRef?: { current: VoiceControls | null };
+  micTrackRef?: { current: { promise: Promise<MediaStreamTrack | null> } };
+  hideHead?: boolean;
+}) {
+  const [participants, setParticipants] = useState<RemoteParticipant[]>([]);
+  const [speakingIds, setSpeakingIds] = useState<string[]>([]);
+  const [meIdentity, setMeIdentity] = useState<string | null>(null);
+  const [connected, setConnected] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [deafened, setDeafened] = useState(false);
+  const [micUnavailable, setMicUnavailable] = useState(false);
+  const [audioBlocked, setAudioBlocked] = useState(false);
+  const [error, setError] = useState("");
+  const [ping, setPing] = useState<number | null>(null);
+  const [volumes, setVolumes] = useState<Record<string, number>>({});
+  const roomRef = useRef<Room | null>(null);
+  const meIdentityRef = useRef<string | null>(null);
+  const deafenedRef = useRef(false);
+  const micUnavailableRef = useRef(false);
+  const micPendingRef = useRef(false);
+  const preTrackRef = useRef<MediaStreamTrack | null>(null);
+  const joinedRef = useRef(false);
+  const audioElsRef = useRef<Set<HTMLAudioElement>>(new Set());
+  const analysersRef = useRef<
+    Map<string, { ctx: AudioContext; analyser: AnalyserNode; track: Track }>
+  >(new Map());
+  const tracksRef = useRef<Map<string, Track>>(new Map());
+  const storedVolumesRef = useRef<Map<string, number>>(new Map());
+  const lastAboveRef = useRef<Map<string, number>>(new Map());
+  const prevSpeakingRef = useRef<string[]>([]);
+
+  const volumeStorageKey = (name: string) => `gacha.voice.volumes.${name}`;
+
+  const readStoredVolume = (name: string): number => {
+    try {
+      const raw = localStorage.getItem(volumeStorageKey(name));
+      if (raw == null) return 1;
+      const n = Number(raw);
+      return Number.isFinite(n) ? Math.min(2, Math.max(0, n)) : 1;
+    } catch {
+      return 1;
+    }
+  };
+
+  const writeStoredVolume = (name: string, v: number) => {
+    try {
+      localStorage.setItem(volumeStorageKey(name), String(v));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const applyVolumeToTrack = (track: Track, v: number) => {
+    try {
+      const like = track as unknown as RemoteAudioTrackLike;
+      if (typeof like.setVolume === "function") {
+        like.setVolume(v);
+      } else {
+        for (const el of track.attachedElements) el.volume = v;
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
+  useEffect(() => {
+    onStatus?.({ connected, channelName, ping, muted, deafened });
+  }, [connected, channelName, ping, muted, deafened]);
+
+  useEffect(() => {
+    let alive = true;
+    let room: Room | null = null;
+    let pingTimer: ReturnType<typeof setInterval> | null = null;
+    let levelTimer: ReturnType<typeof setInterval> | null = null;
+
+    const refresh = () => {
+      if (!alive || !room) return;
+      setParticipants(Array.from(room.remoteParticipants.values()));
+    };
+
+    const attachAudio = (track: Track, participant: RemoteParticipant) => {
+      const el = track.attach();
+      audioElsRef.current.add(el);
+      const name = participant.name ?? participant.identity;
+      const stored = storedVolumesRef.current.get(name) ?? readStoredVolume(name);
+      storedVolumesRef.current.set(name, stored);
+      tracksRef.current.set(participant.identity, track);
+      setVolumes((prev) => ({ ...prev, [participant.identity]: stored }));
+      applyVolumeToTrack(track, deafenedRef.current ? 0 : stored);
+    };
+
+    const detachAudio = (track: Track, participant?: RemoteParticipant) => {
+      for (const el of track.detach()) audioElsRef.current.delete(el);
+      if (participant) tracksRef.current.delete(participant.identity);
+    };
+
+    const syncMic = () => {
+      if (alive && room && !deafenedRef.current) {
+        setMuted(!room.localParticipant.isMicrophoneEnabled);
+      }
+    };
+
+    const samplePing = async () => {
+      if (!room) return;
+      try {
+        const pc = room.engine.pcManager?.publisher;
+        if (!pc) return;
+        const stats = await pc.getStats();
+        let rtt: number | null = null;
+        stats.forEach((r) => {
+          if (r.type === "candidate-pair") {
+            const cp = r as RTCIceCandidatePairStats & {
+              selected?: boolean;
+              nomination?: string;
+            };
+            const active = cp.selected === true || cp.nomination === "selected";
+            if (active && typeof cp.currentRoundTripTime === "number") {
+              rtt = cp.currentRoundTripTime * 1000;
+            }
+          }
+        });
+        setPing(rtt);
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const removeAnalyser = (identity: string) => {
+      const a = analysersRef.current.get(identity);
+      if (a) {
+        void a.ctx.close();
+        analysersRef.current.delete(identity);
+      }
+    };
+
+    const rmsOf = (analyser: AnalyserNode) => {
+      const data = new Float32Array(analyser.fftSize);
+      analyser.getFloatTimeDomainData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+      return Math.sqrt(sum / data.length);
+    };
+
+    const syncLevels = () => {
+      if (!room) return;
+      const target = new Map<string, Track>();
+      for (const [identity, rp] of room.remoteParticipants) {
+        for (const pub of rp.audioTrackPublications.values()) {
+          if (pub.isSubscribed && pub.track) {
+            target.set(identity, pub.track);
+            break;
+          }
+        }
+      }
+      const me = meIdentityRef.current;
+      if (me) {
+        const meTracks = Array.from(
+          room.localParticipant.audioTrackPublications.values(),
+        );
+        const activeMe = meTracks.find(
+          (p) => p.track?.kind === "audio" && !p.track.mediaStreamTrack?.muted,
+        ) ?? meTracks.find((p) => p.track?.kind === "audio");
+        if (activeMe?.track) target.set(me, activeMe.track);
+      }
+      for (const [identity, track] of target) {
+        const cur = analysersRef.current.get(identity);
+        if (cur?.track === track) continue;
+        removeAnalyser(identity);
+        if (track.mediaStreamTrack) {
+          try {
+            const ctx = new AudioContext();
+            void ctx.resume();
+            const src = ctx.createMediaStreamSource(
+              new MediaStream([track.mediaStreamTrack]),
+            );
+            const analyser = ctx.createAnalyser();
+            analyser.fftSize = 512;
+            src.connect(analyser);
+            analysersRef.current.set(identity, { ctx, analyser, track });
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+      for (const [identity] of analysersRef.current) {
+        if (!target.has(identity)) removeAnalyser(identity);
+      }
+      const now = performance.now();
+      const speaking: string[] = [];
+      analysersRef.current.forEach((a, identity) => {
+        try {
+          if (rmsOf(a.analyser) > SPEAKING_THRESHOLD) {
+            lastAboveRef.current.set(identity, now);
+          }
+          const last = lastAboveRef.current.get(identity);
+          if (last != null && now - last < SPEAKING_HANG_MS) {
+            speaking.push(identity);
+          }
+        } catch {
+          /* ignore */
+        }
+      });
+      const prev = prevSpeakingRef.current;
+      if (
+        speaking.length !== prev.length ||
+        speaking.some((id, i) => id !== prev[i])
+      ) {
+        prevSpeakingRef.current = speaking;
+        setSpeakingIds(speaking);
+      }
+    };
+
+    (async () => {
+      try {
+        const { token, url } = await api.voiceJoin(channelId);
+        if (!alive) return;
+        room = new Room({ webAudioMix: true });
+        roomRef.current = room;
+
+        room.on(RoomEvent.ParticipantConnected, (p: RemoteParticipant) => {
+          const mine = room?.localParticipant.joinedAt?.getTime() ?? 0;
+          const theirs = p.joinedAt?.getTime() ?? mine + 1;
+          if (theirs >= mine) playJoinSound();
+          refresh();
+        });
+        room.on(RoomEvent.ParticipantDisconnected, (p) => {
+          removeAnalyser(p.identity);
+          tracksRef.current.delete(p.identity);
+          playLeaveSound();
+          refresh();
+        });
+        room.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
+          if (track.kind === "audio") attachAudio(track, participant);
+          refresh();
+        });
+        room.on(RoomEvent.TrackUnsubscribed, (track, _pub, participant) => {
+          if (track.kind === "audio") detachAudio(track, participant);
+          refresh();
+        });
+        room.on(RoomEvent.TrackMuted, () => {
+          syncMic();
+          refresh();
+        });
+        room.on(RoomEvent.TrackUnmuted, () => {
+          syncMic();
+          refresh();
+        });
+        room.on(RoomEvent.ParticipantAttributesChanged, () => {
+          refresh();
+        });
+        room.on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
+          if (!alive) return;
+          setConnected(state === ConnectionState.Connected);
+          if (state === ConnectionState.Disconnected) setError("Соединение прервано");
+        });
+        room.on(RoomEvent.AudioPlaybackStatusChanged, () => {
+          if (alive) setAudioBlocked(!room?.canPlaybackAudio);
+        });
+
+        console.log("[voice] connecting to", url);
+        await room.connect(url, token, { autoSubscribe: true });
+        if (!alive) return;
+        const lk = room;
+        setConnected(true);
+        setMeIdentity(lk.localParticipant.identity);
+        meIdentityRef.current = lk.localParticipant.identity;
+        console.log("[voice] connected, room:", lk.name, "canPlayAudio:", lk.canPlaybackAudio);
+        (window as unknown as Record<string, unknown>).__gachaVoice = lk;
+        playJoinSound();
+        joinedRef.current = true;
+        setAudioBlocked(!lk.canPlaybackAudio);
+
+        const enableMic = async (): Promise<boolean> => {
+          try {
+            await lk.localParticipant.setMicrophoneEnabled(true);
+            micPendingRef.current = false;
+            return true;
+          } catch (err) {
+            console.warn("[voice] mic не включился автоматически:", err);
+            return false;
+          }
+        };
+
+        const preTrack = (await micTrackRef?.current?.promise) ?? null;
+        if (preTrack) preTrackRef.current = preTrack;
+        if (!alive) {
+          preTrack?.stop();
+          return;
+        }
+        if (preTrack) {
+          try {
+            await lk.localParticipant.publishTrack(preTrack, {
+              source: Track.Source.Microphone,
+              name: "microphone",
+            });
+            micPendingRef.current = false;
+            console.log(
+              "[voice] микрофон опубликован из пред-захвата:",
+              lk.localParticipant.isMicrophoneEnabled,
+            );
+          } catch (err) {
+            console.warn("[voice] публикация микрофона не удалась:", err);
+            preTrack.stop();
+            preTrackRef.current = null;
+            micPendingRef.current = true;
+          }
+        } else if (micTrackRef?.current) {
+          micUnavailableRef.current = true;
+          setMicUnavailable(true);
+          micPendingRef.current = false;
+        } else if (!(await enableMic())) {
+          micPendingRef.current = true;
+        }
+        if (alive) syncMic();
+
+        if (!lk.canPlaybackAudio) {
+          try {
+            await lk.startAudio();
+            if (alive) setAudioBlocked(false);
+          } catch {
+            /* звук разблокируется по первому жесту */
+          }
+        }
+
+        const onGesture = () => {
+          if (!alive || !lk) return;
+          if (!lk.canPlaybackAudio) {
+            void lk
+              .startAudio()
+              .then(() => {
+                if (alive) setAudioBlocked(false);
+              })
+              .catch(() => {});
+          }
+          if (micPendingRef.current) {
+            void enableMic().then((ok) => {
+              if (!alive) return;
+              if (ok) {
+                syncMic();
+              } else {
+                micPendingRef.current = false;
+                setMicUnavailable(true);
+                micUnavailableRef.current = true;
+              }
+            });
+          }
+        };
+        window.addEventListener("pointerdown", onGesture, { once: true });
+
+        refresh();
+        pingTimer = setInterval(samplePing, 2000);
+        void samplePing();
+        levelTimer = setInterval(syncLevels, 200);
+        syncLevels();
+      } catch (err) {
+        if (alive) {
+          setError(err instanceof Error ? err.message : "Ошибка подключения");
+          console.error("[voice] connect error:", err);
+        }
+      }
+    })();
+
+    return () => {
+      alive = false;
+      if (joinedRef.current) playLeaveSound();
+      if (pingTimer) clearInterval(pingTimer);
+      if (levelTimer) clearInterval(levelTimer);
+      audioElsRef.current.clear();
+      for (const [, a] of analysersRef.current) void a.ctx.close();
+      analysersRef.current.clear();
+      tracksRef.current.clear();
+      preTrackRef.current?.stop();
+      preTrackRef.current = null;
+      room?.disconnect();
+      roomRef.current = null;
+      onStatus?.(null);
+      onSpeaking?.([]);
+      onParticipants?.({});
+    };
+  }, [channelId]);
+
+  useEffect(() => {
+    onSpeaking?.(speakingIds);
+  }, [speakingIds, onSpeaking]);
+
+  useEffect(() => {
+    const room = roomRef.current;
+    if (!room) return;
+    void room.localParticipant.setAttributes({
+      gacha_muted: muted ? "1" : "0",
+      gacha_deafened: deafened ? "1" : "0",
+    });
+  }, [muted, deafened]);
+
+  useEffect(() => {
+    if (!onParticipants) return;
+    const map: Record<string, ParticipantVoiceState> = {};
+    const me = meIdentityRef.current;
+    if (me) map[me.split("--")[0]] = { muted, deafened };
+    for (const p of participants) {
+      map[p.identity.split("--")[0]] = {
+        muted: p.attributes?.gacha_muted === "1" || !p.isMicrophoneEnabled,
+        deafened: p.attributes?.gacha_deafened === "1",
+      };
+    }
+    onParticipants(map);
+  }, [participants, muted, deafened, onParticipants]);
+
+  useEffect(() => {
+    if (!controlsRef) return;
+    controlsRef.current = { toggleMic, toggleDeafen, leave };
+    return () => {
+      controlsRef.current = null;
+    };
+  }, []);
+
+  const toggleMic = async () => {
+    const room = roomRef.current;
+    if (!room) return;
+    if (deafenedRef.current) return;
+    try {
+      const next = !room.localParticipant.isMicrophoneEnabled;
+      await room.localParticipant.setMicrophoneEnabled(next);
+      setMuted(!next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка");
+    }
+  };
+
+  const toggleDeafen = async () => {
+    const room = roomRef.current;
+    if (!room) return;
+    const next = !deafenedRef.current;
+    deafenedRef.current = next;
+    setDeafened(next);
+    try {
+      if (next) {
+        await room.localParticipant.setMicrophoneEnabled(false);
+        setMuted(true);
+        for (const track of tracksRef.current.values())
+          applyVolumeToTrack(track, 0);
+      } else {
+        for (const [identity, track] of tracksRef.current) {
+          const p = room.remoteParticipants.get(identity);
+          const name = p?.name ?? identity;
+          const v =
+            storedVolumesRef.current.get(name) ?? readStoredVolume(name);
+          applyVolumeToTrack(track, v);
+        }
+        if (!micUnavailableRef.current) {
+          await room.localParticipant.setMicrophoneEnabled(true);
+          setMuted(false);
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка");
+    }
+  };
+
+  const leave = () => {
+    roomRef.current?.disconnect();
+    roomRef.current = null;
+    onLeave();
+  };
+
+  const startAudio = async () => {
+    const room = roomRef.current;
+    if (!room) return;
+    await room.startAudio();
+    setAudioBlocked(!room.canPlaybackAudio);
+  };
+
+  const setParticipantVolume = (identity: string, name: string, v: number) => {
+    const clamped = Math.min(2, Math.max(0, v));
+    storedVolumesRef.current.set(name, clamped);
+    writeStoredVolume(name, clamped);
+    setVolumes((prev) => ({ ...prev, [identity]: clamped }));
+    const track = tracksRef.current.get(identity);
+    if (track && !deafenedRef.current) applyVolumeToTrack(track, clamped);
+  };
+
+  const meSpeaking = meIdentity ? speakingIds.includes(meIdentity) : false;
+
+  return (
+    <div className="pv-room voice-room">
+      {!hideHead && (
+        <div className="pv-room-head">
+          <h2 className="pv-room-name">
+            <span className="ch-icon">🔊</span> {channelName}
+          </h2>
+          <span className="pv-room-sub">голосовой канал · LiveKit</span>
+        </div>
+      )}
+
+      <div className="pv-members">
+        <div className={`pv-member ${meSpeaking ? "speaking" : ""}`}>
+          <Avatar src={meAvatar} name={meName} size={40} online />
+          <span className="pv-member-name">{meName}</span>
+          <span className="pv-member-owner">вы</span>
+          {muted && (
+            <span className="pv-member-ico" title="Микрофон выключен">
+              <MicOffMiniIcon />
+            </span>
+          )}
+          {deafened && (
+            <span className="pv-member-ico" title="Оглушён">
+              <DeafenOffMiniIcon />
+            </span>
+          )}
+        </div>
+        {participants.length === 0 && (
+          <p className="modal-note">Пока никто не подключился</p>
+        )}
+        {participants.map((p) => {
+          const name = p.name ?? p.identity;
+          const vol = volumes[p.identity] ?? 1;
+          return (
+            <div
+              key={p.identity}
+              className={`pv-member ${speakingIds.includes(p.identity) ? "speaking" : ""}`}
+            >
+              <Avatar src={null} name={name} size={40} online />
+              <span className="pv-member-name">{name}</span>
+              {(!p.isMicrophoneEnabled || p.attributes?.gacha_muted === "1") && (
+                <span className="pv-member-ico" title="Микрофон выключен">
+                  <MicOffMiniIcon />
+                </span>
+              )}
+              {p.attributes?.gacha_deafened === "1" && (
+                <span className="pv-member-ico" title="Оглушён">
+                  <DeafenOffMiniIcon />
+                </span>
+              )}
+              <div className="pv-volume">
+                <input
+                  type="range"
+                  min={0}
+                  max={200}
+                  step={5}
+                  value={Math.round(vol * 100)}
+                  onChange={(e) =>
+                    setParticipantVolume(
+                      p.identity,
+                      name,
+                      Number(e.target.value) / 100,
+                    )
+                  }
+                  title={`Громкость ${name}`}
+                />
+                <span className="pv-volume-val">{Math.round(vol * 100)}%</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {micUnavailable && (
+        <p className="modal-note">
+          Микрофон недоступен — вы слышите других, но вас не слышно.
+        </p>
+      )}
+      {audioBlocked && (
+        <div className="voice-unlock">
+          <p className="modal-note">
+            Браузер заблокировал звук. Нажмите кнопку, чтобы включить прослушивание.
+          </p>
+          <button className="btn primary" onClick={startAudio}>
+            Включить звук
+          </button>
+        </div>
+      )}
+      {error && <p className="error">{error}</p>}
+
+      <div className="voice-controls-wrap">
+        <div className="voice-controls">
+          <button
+            className={`voice-ctl ${muted ? "active" : ""}`}
+            onClick={toggleMic}
+            disabled={deafened}
+            title={muted ? "Включить микрофон" : "Выключить микрофон"}
+          >
+            {muted ? <MicOffIcon /> : <MicIcon />}
+          </button>
+          <button
+            className={`voice-ctl ${deafened ? "active" : ""}`}
+            onClick={toggleDeafen}
+            title={deafened ? "Снять оглушение" : "Оглушить"}
+          >
+            {deafened ? <DeafenOffIcon /> : <DeafenIcon />}
+          </button>
+          <button className="voice-ctl" disabled title="Демонстрация экрана (скоро)">
+            <ScreenShareIcon />
+          </button>
+        </div>
+        <button className="voice-ctl exit" onClick={leave} title="Покинуть канал">
+          <LeaveIcon />
+        </button>
+      </div>
+    </div>
+  );
+}

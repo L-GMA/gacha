@@ -1,0 +1,15 @@
+# Local development config for LiveKit SFU.
+# Production (VPS) will override: rtc.use_external_ip, TLS via Caddy, TURN, keys.
+port: 7880
+bind_addresses:
+  - ""
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 60000
+  use_external_ip: false
+  enable_loopback_candidate: true
+keys:
+  devkey: 376fcc2a1bad4fd2b3342e5f99fcadb8
+logging:
+  level: info
