@@ -19,6 +19,13 @@ type RemoteAudioTrackLike = {
 const SPEAKING_THRESHOLD = 0.02;
 const SPEAKING_HANG_MS = 350;
 
+const isDesktopApp =
+  typeof window !== "undefined" &&
+  typeof window.gachaScreen?.pick === "function";
+
+const screenBitrate = (fps: 30 | 60): number =>
+  fps === 60 ? 8_000_000 : 5_000_000;
+
 function MicIcon() {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -714,23 +721,51 @@ export function VoiceRoom({
         });
       return;
     }
-    writeScreenPref("res", screenRes);
-    writeScreenPref("fps", String(screenFps));
-    const width = screenRes === "1080" ? 1920 : 1280;
-    const height = screenRes === "1080" ? 1080 : 720;
-    void room.localParticipant
-      .setScreenShareEnabled(true, {
-        resolution: { width, height, frameRate: screenFps },
-      })
-      .catch((err) => {
-        const msg = err instanceof Error ? err.message : "";
-        if (!/notallowed|cancel|abort|dismiss|permission/i.test(msg)) {
-          setError(msg || "Не удалось начать демонстрацию экрана");
-        }
-      })
-      .finally(() => {
-        screenBusyRef.current = false;
-      });
+    const start = (quality: "720" | "1080", fps: 30 | 60) => {
+      writeScreenPref("res", quality);
+      writeScreenPref("fps", String(fps));
+      const width = quality === "1080" ? 1920 : 1280;
+      const height = quality === "1080" ? 1080 : 720;
+      void room.localParticipant
+        .setScreenShareEnabled(
+          true,
+          { resolution: { width, height, frameRate: fps } },
+          {
+            videoEncoding: {
+              maxBitrate: screenBitrate(fps),
+              maxFramerate: fps,
+            },
+          },
+        )
+        .catch((err) => {
+          const msg = err instanceof Error ? err.message : "";
+          if (!/notallowed|cancel|abort|dismiss|permission/i.test(msg)) {
+            setError(msg || "Не удалось начать демонстрацию экрана");
+          }
+        })
+        .finally(() => {
+          screenBusyRef.current = false;
+        });
+    };
+    if (isDesktopApp) {
+      const pick = window.gachaScreen?.pick;
+      if (!pick) return;
+      void pick({ quality: screenRes, fps: screenFps })
+        .then((res) => {
+          if ("cancelled" in res) {
+            screenBusyRef.current = false;
+            return;
+          }
+          setScreenRes(res.quality);
+          setScreenFps(res.fps);
+          start(res.quality, res.fps);
+        })
+        .catch(() => {
+          screenBusyRef.current = false;
+        });
+      return;
+    }
+    start(screenRes, screenFps);
   };
 
   const leave = () => {
@@ -897,28 +932,30 @@ export function VoiceRoom({
           >
             <ScreenShareIcon />
           </button>
-          <div className="voice-ctl-selects">
-            <select
-              className="pv-qsel"
-              value={screenRes}
-              disabled={sharingScreen}
-              onChange={(e) => setScreenRes(e.target.value as "720" | "1080")}
-              title="Разрешение трансляции"
-            >
-              <option value="720">720p</option>
-              <option value="1080">1080p</option>
-            </select>
-            <select
-              className="pv-qsel"
-              value={String(screenFps)}
-              disabled={sharingScreen}
-              onChange={(e) => setScreenFps(Number(e.target.value) as 30 | 60)}
-              title="Частота кадров"
-            >
-              <option value="30">30 fps</option>
-              <option value="60">60 fps</option>
-            </select>
-          </div>
+          {!isDesktopApp && (
+            <div className="voice-ctl-selects">
+              <select
+                className="pv-qsel"
+                value={screenRes}
+                disabled={sharingScreen}
+                onChange={(e) => setScreenRes(e.target.value as "720" | "1080")}
+                title="Разрешение трансляции"
+              >
+                <option value="720">720p</option>
+                <option value="1080">1080p</option>
+              </select>
+              <select
+                className="pv-qsel"
+                value={String(screenFps)}
+                disabled={sharingScreen}
+                onChange={(e) => setScreenFps(Number(e.target.value) as 30 | 60)}
+                title="Частота кадров"
+              >
+                <option value="30">30 fps</option>
+                <option value="60">60 fps</option>
+              </select>
+            </div>
+          )}
         </div>
         <button className="voice-ctl exit" onClick={leave} title="Покинуть канал">
           <LeaveIcon />

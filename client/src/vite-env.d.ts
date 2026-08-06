@@ -14,4 +14,9 @@ interface Window {
     onUpdateStatus?: (callback: (status: UpdateStatus) => void) => () => void;
     skipUpdate?: () => void;
   };
+  gachaScreen?: {
+    pick?: (prefs: { quality: string; fps: number }) => Promise<
+      { cancelled: true } | { quality: "720" | "1080"; fps: 30 | 60 }
+    >;
+  };
 }

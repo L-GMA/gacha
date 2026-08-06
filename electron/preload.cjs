@@ -9,3 +9,7 @@ contextBridge.exposeInMainWorld("desktop", {
   },
   skipUpdate: () => ipcRenderer.send("update:skip"),
 });
+
+contextBridge.exposeInMainWorld("gachaScreen", {
+  pick: (prefs) => ipcRenderer.invoke("screen:pick", prefs),
+});

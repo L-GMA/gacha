@@ -13,7 +13,9 @@ let mainWindow = null;
 let splashWindow = null;
 let updateSkipped = false;
 let pickerWindow = null;
-let pendingDisplayPick = null;
+let pendingPickResolve = null;
+let pendingScreenSelection = null;
+let currentScreenPrefs = { quality: "1080", fps: 30 };
 const pickerSources = new Map();
 
 function sendUpdateStatus(status) {
@@ -67,43 +69,76 @@ function openMainWindow() {
   closeSplash();
 }
 
+function openPickerWindow() {
+  if (pickerWindow && !pickerWindow.isDestroyed()) {
+    pickerWindow.focus();
+    return;
+  }
+  pickerWindow = new BrowserWindow({
+    width: 760,
+    height: 560,
+    minWidth: 600,
+    minHeight: 400,
+    parent: mainWindow,
+    modal: true,
+    autoHideMenuBar: true,
+    backgroundColor: "#141517",
+    title: "Демонстрация экрана",
+    webPreferences: {
+      preload: path.join(__dirname, "picker-preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  pickerWindow.loadFile(path.join(__dirname, "picker.html"));
+  pickerWindow.on("closed", () => {
+    pickerWindow = null;
+    const pr = pendingPickResolve;
+    pendingPickResolve = null;
+    if (pr) {
+      try {
+        pr({ cancelled: true });
+      } catch {
+        /* ignore */
+      }
+    }
+  });
+}
+
 function setupDisplayMediaHandler() {
-  session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
-    pendingDisplayPick = callback;
-    if (pickerWindow && !pickerWindow.isDestroyed()) {
-      pickerWindow.focus();
+  session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
+    if (pendingScreenSelection) {
+      const sel = pendingScreenSelection;
+      pendingScreenSelection = null;
+      try {
+        callback({ video: sel.source });
+      } catch {
+        /* ignore */
+      }
       return;
     }
-    pickerWindow = new BrowserWindow({
-      width: 760,
-      height: 520,
-      minWidth: 600,
-      minHeight: 360,
-      parent: mainWindow,
-      modal: true,
-      autoHideMenuBar: true,
-      backgroundColor: "#141517",
-      title: "Демонстрация экрана",
-      webPreferences: {
-        preload: path.join(__dirname, "picker-preload.cjs"),
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: true,
-      },
-    });
-    pickerWindow.loadFile(path.join(__dirname, "picker.html"));
-    pickerWindow.on("closed", () => {
-      pickerWindow = null;
-      const cb = pendingDisplayPick;
-      pendingDisplayPick = null;
-      if (cb) {
+    try {
+      const sources = await desktopCapturer.getSources({
+        types: ["screen"],
+        thumbnailSize: { width: 0, height: 0 },
+      });
+      if (sources.length > 0) {
         try {
-          cb({});
+          callback({ video: sources[0] });
         } catch {
           /* ignore */
         }
+        return;
       }
-    });
+    } catch {
+      /* ignore */
+    }
+    try {
+      callback({});
+    } catch {
+      /* ignore */
+    }
   });
 }
 
@@ -193,6 +228,20 @@ app.whenReady().then(() => {
     openMainWindow();
   });
 
+  ipcMain.handle("screen:pick", (_e, prefs) => {
+    if (pendingPickResolve) return { cancelled: true };
+    if (prefs && typeof prefs === "object") {
+      currentScreenPrefs = {
+        quality: prefs.quality === "720" ? "720" : "1080",
+        fps: prefs.fps === 60 ? 60 : 30,
+      };
+    }
+    openPickerWindow();
+    return new Promise((resolve) => {
+      pendingPickResolve = resolve;
+    });
+  });
+
   ipcMain.handle("picker:list", async () => {
     const screens = await desktopCapturer.getSources({
       types: ["screen"],
@@ -212,16 +261,31 @@ app.whenReady().then(() => {
         thumbnail: s.thumbnail.isEmpty() ? null : s.thumbnail.toDataURL(),
       };
     };
-    return { screens: screens.map(fmt), windows: windows.map(fmt) };
+    return {
+      screens: screens.map(fmt),
+      windows: windows.map(fmt),
+      prefs: currentScreenPrefs,
+    };
   });
 
-  ipcMain.handle("picker:select", (_e, id) => {
+  ipcMain.handle("picker:select", (_e, id, quality, fps) => {
     const source = pickerSources.get(id) ?? null;
-    const cb = pendingDisplayPick;
-    pendingDisplayPick = null;
-    if (cb) {
+    if (source) {
+      currentScreenPrefs = {
+        quality: quality === "720" ? "720" : "1080",
+        fps: fps === 60 ? 60 : 30,
+      };
+      pendingScreenSelection = { source };
+    }
+    const pr = pendingPickResolve;
+    pendingPickResolve = null;
+    if (pr) {
       try {
-        cb(source ? { video: source } : {});
+        pr(
+          source
+            ? { quality: currentScreenPrefs.quality, fps: currentScreenPrefs.fps }
+            : { cancelled: true },
+        );
       } catch {
         /* ignore */
       }
@@ -230,15 +294,16 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle("picker:cancel", () => {
-    const cb = pendingDisplayPick;
-    pendingDisplayPick = null;
-    if (cb) {
+    const pr = pendingPickResolve;
+    pendingPickResolve = null;
+    if (pr) {
       try {
-        cb({});
+        pr({ cancelled: true });
       } catch {
         /* ignore */
       }
     }
+    pendingScreenSelection = null;
     if (pickerWindow && !pickerWindow.isDestroyed()) pickerWindow.close();
   });
 
