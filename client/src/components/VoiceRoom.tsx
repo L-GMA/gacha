@@ -1017,28 +1017,37 @@ export function VoiceRoom({
         canvas.width = width;
         canvas.height = height;
         const gctx = canvas.getContext("2d");
+        if (!gctx) throw new Error("Не удалось создать холст для демонстрации");
         const videoEl = document.createElement("video");
         videoEl.muted = true;
         videoEl.playsInline = true;
         videoEl.srcObject = new MediaStream([rawVideo]);
+        videoEl.style.cssText =
+          "position:fixed;top:-10000px;left:-10000px;width:1px;height:1px;opacity:0;pointer-events:none;";
+        document.body.appendChild(videoEl);
+        const ready = new Promise<void>((resolve) => {
+          if (videoEl.readyState >= 2 && videoEl.videoWidth > 0) {
+            resolve();
+            return;
+          }
+          videoEl.addEventListener("loadeddata", () => resolve(), { once: true });
+          setTimeout(resolve, 1500);
+        });
         await videoEl.play().catch(() => {});
+        await ready;
         let running = true;
         let raf = 0;
-        const frameMs = 1000 / fps;
-        let lastDraw = 0;
-        const draw = (t: number) => {
+        const draw = () => {
           if (!running) return;
           raf = requestAnimationFrame(draw);
-          if (t - lastDraw < frameMs) return;
-          lastDraw = t;
           try {
-            gctx?.drawImage(videoEl, 0, 0, width, height);
+            gctx.drawImage(videoEl, 0, 0, width, height);
           } catch {
             /* ignore */
           }
         };
-        raf = requestAnimationFrame(draw);
-        const outStream = canvas.captureStream(0);
+        draw();
+        const outStream = canvas.captureStream(fps);
         const outVideo = outStream.getVideoTracks()[0];
         const localVideo = new LocalVideoTrack(outVideo);
         const localAudio = rawAudio ? new LocalAudioTrack(rawAudio) : null;
@@ -1062,6 +1071,7 @@ export function VoiceRoom({
           cancelAnimationFrame(raf);
           localVideo.stop();
           localAudio?.stop();
+          videoEl.remove();
           for (const t of stream.getTracks()) t.stop();
           return;
         }
@@ -1078,9 +1088,14 @@ export function VoiceRoom({
             localVideo.stop();
             localAudio?.stop();
             videoEl.srcObject = null;
+            videoEl.remove();
             for (const t of stream.getTracks()) t.stop();
           },
         };
+        rawVideo.addEventListener("ended", () => {
+          screenCaptureRef.current?.stop();
+          screenCaptureRef.current = null;
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : "";
         if (!/notallowed|cancel|abort|dismiss|permission/i.test(msg)) {
