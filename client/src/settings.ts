@@ -3,6 +3,7 @@ export type UserSettings = {
   notifications: boolean;
   micDeviceId: string;
   cameraDeviceId: string;
+  micGain: number;
 };
 
 const KEY = "gacha.settings";
@@ -11,6 +12,7 @@ const DEFAULTS: UserSettings = {
   notifications: true,
   micDeviceId: "",
   cameraDeviceId: "",
+  micGain: 1,
 };
 
 let current: UserSettings = (() => {

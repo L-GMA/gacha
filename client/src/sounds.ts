@@ -27,5 +27,5 @@ const makePlayer = (src: string, key: "join" | "leave") => {
   };
 };
 
-export const playJoinSound = makePlayer("/sounds/voice-join.wav", "join");
-export const playLeaveSound = makePlayer("/sounds/voice-leave.wav", "leave");
+export const playJoinSound = makePlayer("./sounds/voice-join.wav", "join");
+export const playLeaveSound = makePlayer("./sounds/voice-leave.wav", "leave");

@@ -4,6 +4,14 @@ import { highestRoleColor } from "../roleColor.js";
 import { Avatar } from "./Avatar.js";
 import { Toggle } from "./Toggle.js";
 import { getSettings, setSetting, subscribeSettings } from "../settings.js";
+import {
+  openMicGraph,
+  setGraphGain,
+  getVoiceMicGraph,
+  micLevel,
+  clampGain,
+  type MicGraph,
+} from "../micPipeline.js";
 
 type SectionId = "profile" | "sound" | "camera" | "notifications";
 
@@ -34,8 +42,8 @@ function SectionIcon({ id }: { id: SectionId }) {
     case "camera":
       return (
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M23 7 16 12v6l7 5V7Z" />
-          <rect x="1" y="5" width="15" height="14" rx="2" />
+          <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z" />
+          <circle cx="12" cy="13" r="3" />
         </svg>
       );
     case "notifications":
@@ -144,7 +152,7 @@ function ProfileSection({ me, onChanged }: { me: User; onChanged: () => void }) 
   return (
     <div className="us-profile">
       <div className="us-profile-hero">
-        <Avatar src={avatar.trim() || me.avatar} name={displayName} size={88} online={me.online} />
+        <Avatar src={avatar.trim() || me.avatar} name={displayName} size={88} />
         <div className="us-profile-hero-info">
           <span className="profile-nick" style={roleColor ? { color: roleColor } : undefined}>
             {displayName}
@@ -228,6 +236,102 @@ function DeviceSelect({
   );
 }
 
+function MicLevelMeter({ settings }: { settings: ReturnType<typeof getSettings> }) {
+  const meterRef = useRef<MicGraph | null>(null);
+  const ownedRef = useRef<MicGraph | null>(null);
+  const [level, setLevel] = useState(0);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    ownedRef.current?.close();
+    ownedRef.current = null;
+    meterRef.current = null;
+    setError("");
+    setLevel(0);
+
+    const voice = getVoiceMicGraph();
+    if (voice) {
+      meterRef.current = voice;
+    } else {
+      openMicGraph(getSettings().micDeviceId)
+        .then((g) => {
+          if (!alive) {
+            g.close();
+            return;
+          }
+          ownedRef.current = g;
+          meterRef.current = g;
+        })
+        .catch(() => {
+          if (alive) setError("Нет доступа к микрофону. Разрешите доступ в системе.");
+        });
+    }
+
+    const timer = setInterval(() => {
+      setLevel(micLevel(meterRef.current));
+    }, 120);
+
+    return () => {
+      alive = false;
+      clearInterval(timer);
+      ownedRef.current?.close();
+      ownedRef.current = null;
+      meterRef.current = null;
+    };
+  }, [settings.micDeviceId]);
+
+  const changeGain = (percent: number) => {
+    const g = clampGain(percent / 100);
+    setSetting("micGain", g);
+    setGraphGain(meterRef.current, g);
+    const voice = getVoiceMicGraph();
+    if (voice) setGraphGain(voice, g);
+  };
+
+  const norm = Math.min(1, level * 3);
+  const active = norm > 0.03;
+
+  return (
+    <div className="us-stack">
+      <div className="us-setting-row">
+        <div className="us-setting-text">
+          <span>Индикатор голоса</span>
+          <small>Показывает, что микрофон передаёт звук</small>
+        </div>
+        {error ? (
+          <span className="us-mic-status err">{error}</span>
+        ) : (
+          <div className="us-mic-meter">
+            {Array.from({ length: 14 }, (_, i) => (
+              <span key={i} className={`us-mic-bar ${norm * 14 >= i + 1 ? "on" : ""}`} />
+            ))}
+            <span className={`us-mic-status ${active ? "on" : ""}`}>
+              {active ? "Работает" : "Тишина"}
+            </span>
+          </div>
+        )}
+      </div>
+      <div className="us-setting-row">
+        <div className="us-setting-text">
+          <span>Усиление микрофона</span>
+          <small>Громкость вашего микрофона для собеседников</small>
+        </div>
+        <input
+          type="range"
+          className="us-gain-range"
+          min={50}
+          max={300}
+          step={5}
+          value={Math.round(clampGain(settings.micGain) * 100)}
+          onChange={(e) => changeGain(Number(e.target.value))}
+        />
+        <span className="us-gain-val">{Math.round(clampGain(settings.micGain) * 100)}%</span>
+      </div>
+    </div>
+  );
+}
+
 function SoundSection() {
   const [settings, setLocal] = useState(getSettings());
   const mics = useDevices("audioinput");
@@ -245,6 +349,10 @@ function SoundSection() {
           </div>
           <Toggle checked={settings.sounds} onChange={(v) => setSetting("sounds", v)} label="Звуки" />
         </div>
+      </div>
+      <div className="us-group-head">Голос</div>
+      <MicLevelMeter settings={settings} />
+      <div className="us-stack">
         <DeviceSelect
           label="Микрофон"
           devices={mics}
@@ -252,7 +360,7 @@ function SoundSection() {
           onChange={(id) => setSetting("micDeviceId", id)}
         />
       </div>
-      <p className="hint">Смена микрофона применится после повторного входа в голосовой канал.</p>
+      <p className="hint">Смена микрофона применится после повторного входа в голосовой канал. Усиление слышно собеседникам сразу.</p>
     </div>
   );
 }

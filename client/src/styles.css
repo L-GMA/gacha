@@ -3243,19 +3243,19 @@ input:focus {
   padding: 0 18px;
   min-height: 52px;
   cursor: text;
+  justify-content: flex-end;
 }
 
 .us-row-field .us-field-label {
   flex-shrink: 0;
-  width: 92px;
   font-size: 15px;
   color: #ffffff;
 }
 
 .us-row-field input {
-  flex: 1;
+  flex: 0 1 260px;
   min-width: 0;
-  text-align: right;
+  text-align: left;
   background: transparent;
   border: none;
   color: rgba(255, 255, 255, 0.5);
@@ -3350,6 +3350,88 @@ input:focus {
   margin: 0;
   font-size: 13px;
   color: rgba(255, 255, 255, 0.45);
+}
+
+.us-mic-meter {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.us-mic-bar {
+  width: 4px;
+  height: 6px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.15);
+  transition: height 0.12s ease, background 0.12s ease;
+}
+
+.us-mic-bar.on {
+  height: 24px;
+  background: #ffffff;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
+}
+
+.us-mic-status {
+  flex-shrink: 0;
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.us-mic-status.on {
+  color: #ffffff;
+}
+
+.us-mic-status.err {
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 400;
+  max-width: 220px;
+  text-align: right;
+}
+
+.us-gain-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 160px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.2);
+  outline: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.us-gain-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: none;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.us-gain-range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: none;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.us-gain-val {
+  flex-shrink: 0;
+  width: 46px;
+  text-align: right;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .cam-preview {

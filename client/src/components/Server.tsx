@@ -16,6 +16,7 @@ import { UserSettings } from "./UserSettings.js";
 import { highestRoleColor } from "../roleColor.js";
 import { Avatar } from "./Avatar.js";
 import { getSettings } from "../settings.js";
+import { openMicGraph, setVoiceMicGraph, getVoiceMicGraph } from "../micPipeline.js";
 
 export function Server({
   invitedBy,
@@ -45,6 +46,7 @@ export function Server({
   const micTrackRef = useRef<{ promise: Promise<MediaStreamTrack | null> }>({
     promise: Promise.resolve(null),
   });
+  const micCaptureTokenRef = useRef(0);
   const [presence, setPresence] = useState<Record<string, VoicePresenceUser[]>>({});
   const prevConnectedRef = useRef(false);
   const [mode, setMode] = useState<"home" | "friends">("home");
@@ -105,6 +107,9 @@ export function Server({
 
   useEffect(() => {
     return () => {
+      const prev = getVoiceMicGraph();
+      prev?.close();
+      setVoiceMicGraph(null);
       void micTrackRef.current.promise.then((t) => t?.stop());
     };
   }, []);
@@ -140,21 +145,33 @@ export function Server({
     mode === "home" && activePassVoiceId != null && activeChannelId == null;
 
   const preCaptureMic = () => {
-    const prev = micTrackRef.current.promise;
+    const token = ++micCaptureTokenRef.current;
+    const prev = getVoiceMicGraph();
+    prev?.close();
+    setVoiceMicGraph(null);
     const deviceId = getSettings().micDeviceId;
     micTrackRef.current = {
-      promise: navigator.mediaDevices
-        .getUserMedia(deviceId ? { audio: { deviceId } } : { audio: true })
-        .then((s) => s.getAudioTracks()[0] ?? null)
+      promise: openMicGraph(deviceId)
+        .then((g) => {
+          if (micCaptureTokenRef.current !== token) {
+            g.close();
+            return null;
+          }
+          const old = getVoiceMicGraph();
+          old?.close();
+          setVoiceMicGraph(g);
+          return g.track;
+        })
         .catch(() => null),
     };
-    if (prev !== micTrackRef.current.promise) void prev.then((t) => t?.stop());
   };
 
   const clearMicTrack = () => {
-    const prev = micTrackRef.current.promise;
+    micCaptureTokenRef.current++;
+    const prev = getVoiceMicGraph();
+    prev?.close();
+    setVoiceMicGraph(null);
     micTrackRef.current = { promise: Promise.resolve(null) };
-    if (prev !== micTrackRef.current.promise) void prev.then((t) => t?.stop());
   };
 
   const handleSelectChannel = (channelId: string) => {
