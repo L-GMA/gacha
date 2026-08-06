@@ -195,6 +195,7 @@ export function VoiceRoom({
   const [volumes, setVolumes] = useState<Record<string, number>>({});
   const [screenVolumes, setScreenVolumes] = useState<Record<string, number>>({});
   const [sharingScreen, setSharingScreen] = useState(false);
+  const [shareSourceFps, setShareSourceFps] = useState(0);
   const [screenRes, setScreenRes] = useState<"720" | "1080">(() =>
     readScreenPref("res", "1080") === "720" ? "720" : "1080",
   );
@@ -1041,6 +1042,11 @@ export function VoiceRoom({
         await ready;
         let running = true;
         let drawTimer: ReturnType<typeof setInterval> | null = null;
+        let fpsTimer: ReturnType<typeof setInterval> | null = null;
+        const outStream = canvas.captureStream(fps);
+        const outVideo = outStream.getVideoTracks()[0] as MediaStreamTrack & {
+          requestFrame?: () => void;
+        };
         const draw = () => {
           if (!running) return;
           try {
@@ -1048,11 +1054,29 @@ export function VoiceRoom({
           } catch {
             /* ignore */
           }
+          try {
+            outVideo.requestFrame?.();
+          } catch {
+            /* ignore */
+          }
         };
         draw();
         drawTimer = setInterval(draw, 1000 / fps);
-        const outStream = canvas.captureStream(fps);
-        const outVideo = outStream.getVideoTracks()[0];
+        // Замер фактического FPS источника — показываем реальные цифры в UI.
+        let srcFrames = 0;
+        try {
+          const tick = () => {
+            srcFrames++;
+            if (running) videoEl.requestVideoFrameCallback(tick);
+          };
+          videoEl.requestVideoFrameCallback(tick);
+          fpsTimer = setInterval(() => {
+            setShareSourceFps(srcFrames);
+            srcFrames = 0;
+          }, 1000);
+        } catch {
+          /* ignore */
+        }
         const localVideo = new LocalVideoTrack(outVideo);
         await room.localParticipant.publishTrack(localVideo, {
           source: Track.Source.ScreenShare,
@@ -1066,6 +1090,7 @@ export function VoiceRoom({
         if (!roomRef.current) {
           running = false;
           if (drawTimer) clearInterval(drawTimer);
+          if (fpsTimer) clearInterval(fpsTimer);
           localVideo.stop();
           videoEl.remove();
           for (const t of stream.getTracks()) t.stop();
@@ -1087,6 +1112,8 @@ export function VoiceRoom({
         if (!roomRef.current) {
           running = false;
           if (drawTimer) clearInterval(drawTimer);
+          if (fpsTimer) clearInterval(fpsTimer);
+          setShareSourceFps(0);
           localVideo.stop();
           localAudio?.stop();
           videoEl.remove();
@@ -1098,6 +1125,8 @@ export function VoiceRoom({
             if (!running) return;
             running = false;
             if (drawTimer) clearInterval(drawTimer);
+            if (fpsTimer) clearInterval(fpsTimer);
+            setShareSourceFps(0);
             void room.localParticipant.unpublishTrack(localVideo).catch(() => {});
             if (localAudio)
               void room.localParticipant
@@ -1220,7 +1249,9 @@ export function VoiceRoom({
           {meScreen && (
             <div className="pv-member-screen">
               <ScreenShareView track={meScreen} muted={true} />
-              <span className="pv-member-screen-label">Ваш экран</span>
+              <span className="pv-member-screen-label">
+                Ваш экран · {shareSourceFps > 0 ? `${shareSourceFps} FPS` : "…"}
+              </span>
             </div>
           )}
         </div>
@@ -1347,8 +1378,7 @@ export function VoiceRoom({
           >
             <ScreenShareIcon />
           </button>
-          {!isDesktopApp && (
-            <div className="voice-ctl-selects">
+          <div className="voice-ctl-selects">
               <select
                 className="pv-qsel"
                 value={screenRes}
@@ -1373,7 +1403,6 @@ export function VoiceRoom({
                 <option value="90">90 fps</option>
               </select>
             </div>
-          )}
         </div>
         <button className="voice-ctl exit" onClick={leave} title="Покинуть канал">
           <LeaveIcon />
