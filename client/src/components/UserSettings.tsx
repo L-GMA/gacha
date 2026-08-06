@@ -10,6 +10,7 @@ import {
   getVoiceMicGraph,
   micLevel,
   clampGain,
+  setMonitorMic,
   type MicGraph,
 } from "../micPipeline.js";
 
@@ -239,7 +240,9 @@ function DeviceSelect({
 function MicLevelMeter({ settings }: { settings: ReturnType<typeof getSettings> }) {
   const meterRef = useRef<MicGraph | null>(null);
   const ownedRef = useRef<MicGraph | null>(null);
+  const monitorRef = useRef(false);
   const [level, setLevel] = useState(0);
+  const [monitor, setMonitor] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -253,6 +256,7 @@ function MicLevelMeter({ settings }: { settings: ReturnType<typeof getSettings> 
     const voice = getVoiceMicGraph();
     if (voice) {
       meterRef.current = voice;
+      setMonitorMic(voice, monitorRef.current);
     } else {
       openMicGraph(getSettings().micDeviceId)
         .then((g) => {
@@ -262,6 +266,7 @@ function MicLevelMeter({ settings }: { settings: ReturnType<typeof getSettings> 
           }
           ownedRef.current = g;
           meterRef.current = g;
+          setMonitorMic(g, monitorRef.current);
         })
         .catch(() => {
           if (alive) setError("Нет доступа к микрофону. Разрешите доступ в системе.");
@@ -275,11 +280,18 @@ function MicLevelMeter({ settings }: { settings: ReturnType<typeof getSettings> 
     return () => {
       alive = false;
       clearInterval(timer);
+      setMonitorMic(meterRef.current, false);
       ownedRef.current?.close();
       ownedRef.current = null;
       meterRef.current = null;
     };
   }, [settings.micDeviceId]);
+
+  const toggleMonitor = () => {
+    monitorRef.current = !monitorRef.current;
+    setMonitor(monitorRef.current);
+    setMonitorMic(meterRef.current, monitorRef.current);
+  };
 
   const changeGain = (percent: number) => {
     const g = clampGain(percent / 100);
@@ -290,7 +302,6 @@ function MicLevelMeter({ settings }: { settings: ReturnType<typeof getSettings> 
   };
 
   const norm = Math.min(1, level * 3);
-  const active = norm > 0.03;
 
   return (
     <div className="us-stack">
@@ -306,11 +317,21 @@ function MicLevelMeter({ settings }: { settings: ReturnType<typeof getSettings> 
             {Array.from({ length: 14 }, (_, i) => (
               <span key={i} className={`us-mic-bar ${norm * 14 >= i + 1 ? "on" : ""}`} />
             ))}
-            <span className={`us-mic-status ${active ? "on" : ""}`}>
-              {active ? "Работает" : "Тишина"}
-            </span>
           </div>
         )}
+      </div>
+      <div className="us-setting-row">
+        <div className="us-setting-text">
+          <span>Прослушать микрофон</span>
+          <small>Воспроизведение вашего голоса через динамики. Лучше в наушниках.</small>
+        </div>
+        <button
+          className={`btn small ${monitor ? "primary" : ""}`}
+          disabled={!!error}
+          onClick={toggleMonitor}
+        >
+          {monitor ? "Остановить" : "Прослушать"}
+        </button>
       </div>
       <div className="us-setting-row">
         <div className="us-setting-text">

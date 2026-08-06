@@ -6,6 +6,8 @@ export type MicGraph = {
   track: MediaStreamTrack;
   gain: GainNode;
   analyser: AnalyserNode;
+  ctx: AudioContext;
+  monitorConnected: boolean;
   close: () => void;
 };
 
@@ -50,6 +52,8 @@ export async function openMicGraph(deviceId: string): Promise<MicGraph> {
     track,
     gain,
     analyser,
+    ctx,
+    monitorConnected: false,
     close() {
       if (closed) return;
       closed = true;
@@ -88,5 +92,24 @@ export function micLevel(graph: MicGraph | null): number {
     return Math.sqrt(sum / data.length);
   } catch {
     return 0;
+  }
+}
+
+export function setMonitorMic(graph: MicGraph | null, on: boolean): void {
+  if (!graph) return;
+  try {
+    if (on && !graph.monitorConnected) {
+      graph.gain.connect(graph.ctx.destination);
+      graph.monitorConnected = true;
+    } else if (!on && graph.monitorConnected) {
+      try {
+        graph.gain.disconnect(graph.ctx.destination);
+      } catch {
+        /* ignore */
+      }
+      graph.monitorConnected = false;
+    }
+  } catch {
+    /* ignore */
   }
 }

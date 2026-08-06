@@ -3242,53 +3242,69 @@ input:focus {
 .us-row-field {
   padding: 0 18px;
   min-height: 52px;
+  gap: 14px;
   cursor: text;
   justify-content: flex-end;
 }
 
 .us-row-field .us-field-label {
   flex-shrink: 0;
-  font-size: 15px;
-  color: #ffffff;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .us-row-field input {
-  flex: 0 1 260px;
-  min-width: 0;
+  flex: 0 0 200px;
+  width: 200px;
+  height: 34px;
+  padding: 0 12px;
   text-align: left;
-  background: transparent;
-  border: none;
-  color: rgba(255, 255, 255, 0.5);
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: #ffffff;
   font-family: inherit;
-  font-size: 15px;
-  transition: color 0.2s ease;
+  font-size: 14px;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.us-row-field input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.us-row-field input:hover {
+  border-color: rgba(255, 255, 255, 0.22);
 }
 
 .us-row-field input:focus {
   outline: none;
-  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(0, 0, 0, 0.35);
 }
 
 .us-row-field-stacked {
   flex-direction: column;
   align-items: stretch;
   gap: 6px;
-  padding: 13px 18px;
+  padding: 12px 18px;
   min-height: 0;
 }
 
 .us-row-field-stacked input {
+  flex: none;
   text-align: left;
   background: rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
-  padding: 9px 12px;
+  padding: 8px 12px;
+  height: 34px;
   color: #ffffff;
+  font-size: 14px;
   transition: border-color 0.2s ease;
 }
 
 .us-row-field-stacked input:focus {
-  border-color: rgba(255, 255, 255, 0.35);
+  border-color: rgba(255, 255, 255, 0.4);
 }
 
 .us-profile {
@@ -3377,17 +3393,8 @@ input:focus {
   flex-shrink: 0;
   margin-left: 8px;
   font-size: 12px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.us-mic-status.on {
-  color: #ffffff;
-}
-
-.us-mic-status.err {
-  color: rgba(255, 255, 255, 0.5);
   font-weight: 400;
+  color: rgba(255, 255, 255, 0.5);
   max-width: 220px;
   text-align: right;
 }
