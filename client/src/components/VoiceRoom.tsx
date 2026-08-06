@@ -39,6 +39,29 @@ const screenBitrate = (fps: 30 | 60 | 90, quality: "720" | "1080"): number => {
   return Math.round(base * (fps / 30));
 };
 
+const supportsH264 = (): boolean => {
+  try {
+    const caps = RTCRtpSender.getCapabilities?.("video");
+    return (
+      caps?.codecs?.some((c) => c.mimeType.toLowerCase().includes("h264")) ??
+      false
+    );
+  } catch {
+    return false;
+  }
+};
+
+const restrictOwnAudioSupported = (): boolean => {
+  try {
+    const supported = navigator.mediaDevices.getSupportedConstraints();
+    return Boolean(
+      (supported as { restrictOwnAudio?: boolean }).restrictOwnAudio
+    );
+  } catch {
+    return false;
+  }
+};
+
 function MicIcon() {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1006,6 +1029,11 @@ export function VoiceRoom({
             echoCancellation: false,
             noiseSuppression: false,
             autoGainControl: false,
+            // Не захватывать собственное воспроизведение голосов собеседников
+            // в системный звук (иначе зрители слышат сами себя).
+            ...(restrictOwnAudioSupported()
+              ? { restrictOwnAudio: true }
+              : {}),
           },
         });
         if (!roomRef.current) {
@@ -1082,6 +1110,12 @@ export function VoiceRoom({
           source: Track.Source.ScreenShare,
           name: "screen",
           simulcast: false,
+          // Аппаратный H.264 сильно легче софтверного VP8 на 1080p60 —
+          // иначе канвас отдаёт 58 FPS, а кодировщик не успевает и зритель
+          // видит мало FPS. VP8-фолбэк отключаем, чтобы он не дублировал
+          // тяжёлое кодирование ради одного несовместимого зрителя.
+          videoCodec: supportsH264() ? "h264" : undefined,
+          backupCodec: false,
           videoEncoding: {
             maxBitrate: screenBitrate(fps, quality),
             maxFramerate: fps,
