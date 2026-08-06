@@ -1279,9 +1279,37 @@ input:focus {
 }
 
 .pv-volume input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
   width: 90px;
-  accent-color: #23a55a;
+  height: 4px;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.2);
+  outline: none;
   cursor: pointer;
+  margin: 0;
+}
+
+.pv-volume input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.pv-volume input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 
 .pv-volume-val {
@@ -3386,6 +3414,8 @@ input:focus {
   appearance: none;
   width: 160px;
   height: 4px;
+  padding: 0;
+  border: none;
   border-radius: 2px;
   background: rgba(255, 255, 255, 0.2);
   outline: none;
