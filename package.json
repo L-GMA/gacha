@@ -49,14 +49,6 @@
       "allowToChangeInstallationDirectory": false,
       "deleteAppDataOnUninstall": false,
       "artifactName": "GACHA-${version}-setup.${ext}"
-    },
-    "mac": {
-      "target": [
-        { "target": "zip", "arch": ["x64", "arm64"] },
-        { "target": "dmg", "arch": ["x64", "arm64"] }
-      ],
-      "category": "public.app-category.social-networking",
-      "identity": null
     }
   }
 }
