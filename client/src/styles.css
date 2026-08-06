@@ -1359,6 +1359,20 @@ input:focus {
   white-space: nowrap;
 }
 
+.pv-screen-volume {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  margin-left: 0;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.65);
+}
+
+.pv-screen-volume input[type="range"] {
+  width: 80px;
+}
+
 .pv-room-actions {
   display: flex;
   gap: 10px;

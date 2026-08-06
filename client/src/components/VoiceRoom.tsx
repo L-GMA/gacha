@@ -190,6 +190,7 @@ export function VoiceRoom({
   const [error, setError] = useState("");
   const [ping, setPing] = useState<number | null>(null);
   const [volumes, setVolumes] = useState<Record<string, number>>({});
+  const [screenVolumes, setScreenVolumes] = useState<Record<string, number>>({});
   const [sharingScreen, setSharingScreen] = useState(false);
   const [screenRes, setScreenRes] = useState<"720" | "1080">(() =>
     readScreenPref("res", "1080") === "720" ? "720" : "1080",
@@ -213,8 +214,10 @@ export function VoiceRoom({
   >(new Map());
   const mixCtxRef = useRef<AudioContext | null>(null);
   const playbackCtxRef = useRef<Map<string, PlaybackCtx>>(new Map());
+  const screenPbRef = useRef<Map<string, PlaybackCtx>>(new Map());
   const tracksRef = useRef<Map<string, Track>>(new Map());
   const storedVolumesRef = useRef<Map<string, number>>(new Map());
+  const storedScreenVolRef = useRef<Map<string, number>>(new Map());
   const lastAboveRef = useRef<Map<string, number>>(new Map());
   const prevSpeakingRef = useRef<string[]>([]);
   const screensRef = useRef<Map<string, Track>>(new Map());
@@ -238,6 +241,51 @@ export function VoiceRoom({
       localStorage.setItem(volumeStorageKey(name), String(v));
     } catch {
       /* ignore */
+    }
+  };
+
+  const screenVolStorageKey = (name: string) =>
+    `gacha.voice.screenvolumes.${name}`;
+
+  const readStoredScreenVol = (name: string): number => {
+    try {
+      const raw = localStorage.getItem(screenVolStorageKey(name));
+      if (raw == null) return 1;
+      const n = Number(raw);
+      return Number.isFinite(n) ? Math.min(2, Math.max(0, n)) : 1;
+    } catch {
+      return 1;
+    }
+  };
+
+  const writeStoredScreenVol = (name: string, v: number) => {
+    try {
+      localStorage.setItem(screenVolStorageKey(name), String(v));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const applyScreenVolumeToTrack = (track: Track, v: number) => {
+    try {
+      const like = track as unknown as RemoteAudioTrackLike;
+      if (typeof like.setVolume === "function") {
+        like.setVolume(v);
+      } else {
+        for (const el of track.attachedElements) el.volume = v;
+      }
+    } catch {
+      /* ignore */
+    }
+    for (const [, pb] of screenPbRef.current) {
+      if (pb.track === track) {
+        try {
+          pb.mono.gain.setTargetAtTime(v, 0, 0.02);
+        } catch {
+          /* ignore */
+        }
+        break;
+      }
     }
   };
 
@@ -348,6 +396,57 @@ export function VoiceRoom({
             /* ignore */
           }
           playbackCtxRef.current.delete(participant.identity);
+        }
+      }
+    };
+
+    const attachScreenAudio = (track: Track, participant: RemoteParticipant) => {
+      const el = track.attach();
+      el.muted = true;
+      audioElsRef.current.add(el);
+      const name = participant.name ?? participant.identity;
+      const stored =
+        storedScreenVolRef.current.get(name) ?? readStoredScreenVol(name);
+      storedScreenVolRef.current.set(name, stored);
+      setScreenVolumes((prev) => ({ ...prev, [participant.identity]: stored }));
+      try {
+        const stream = track.mediaStreamTrack
+          ? new MediaStream([track.mediaStreamTrack])
+          : track.mediaStream;
+        if (stream) {
+          let ctx = mixCtxRef.current;
+          if (!ctx || ctx.state === "closed") {
+            ctx = new AudioContext();
+            mixCtxRef.current = ctx;
+          }
+          if (ctx.state === "suspended") void ctx.resume();
+          const src = ctx.createMediaStreamSource(stream);
+          const mono = ctx.createGain();
+          mono.channelCount = 1;
+          mono.channelCountMode = "explicit";
+          mono.channelInterpretation = "speakers";
+          mono.gain.value = deafenedRef.current ? 0 : stored;
+          src.connect(mono);
+          mono.connect(ctx.destination);
+          screenPbRef.current.set(participant.identity, { src, mono, track });
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const detachScreenAudio = (track: Track, participant?: RemoteParticipant) => {
+      for (const el of track.detach()) audioElsRef.current.delete(el);
+      if (participant) {
+        const pb = screenPbRef.current.get(participant.identity);
+        if (pb) {
+          try {
+            pb.src.disconnect();
+            pb.mono.disconnect();
+          } catch {
+            /* ignore */
+          }
+          screenPbRef.current.delete(participant.identity);
         }
       }
     };
@@ -508,12 +607,18 @@ export function VoiceRoom({
             screensRef.current.delete(p.identity);
             syncScreens();
           }
+          const spb = screenPbRef.current.get(p.identity);
+          if (spb) {
+            detachScreenAudio(spb.track, p);
+          }
           playLeaveSound();
           refresh();
         });
         room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
           if (track.kind === "audio") {
-            if (pub.source !== Track.Source.ScreenShareAudio) {
+            if (pub.source === Track.Source.ScreenShareAudio) {
+              attachScreenAudio(track, participant);
+            } else {
               attachAudio(track, participant);
             }
           } else if (pub.source === Track.Source.ScreenShare) {
@@ -524,7 +629,9 @@ export function VoiceRoom({
         });
         room.on(RoomEvent.TrackUnsubscribed, (track, pub, participant) => {
           if (track.kind === "audio") {
-            if (pub.source !== Track.Source.ScreenShareAudio) {
+            if (pub.source === Track.Source.ScreenShareAudio) {
+              detachScreenAudio(track, participant);
+            } else {
               detachAudio(track, participant);
             }
           } else if (pub.source === Track.Source.ScreenShare) {
@@ -741,6 +848,15 @@ export function VoiceRoom({
         }
       }
       playbackCtxRef.current.clear();
+      for (const [, pb] of screenPbRef.current) {
+        try {
+          pb.src.disconnect();
+          pb.mono.disconnect();
+        } catch {
+          /* ignore */
+        }
+      }
+      screenPbRef.current.clear();
       if (mixCtxRef.current) {
         try {
           void mixCtxRef.current.close();
@@ -832,6 +948,8 @@ export function VoiceRoom({
         setMuted(true);
         for (const track of tracksRef.current.values())
           applyVolumeToTrack(track, 0);
+        for (const [, pb] of screenPbRef.current)
+          applyScreenVolumeToTrack(pb.track, 0);
       } else {
         for (const [identity, track] of tracksRef.current) {
           const p = room.remoteParticipants.get(identity);
@@ -839,6 +957,13 @@ export function VoiceRoom({
           const v =
             storedVolumesRef.current.get(name) ?? readStoredVolume(name);
           applyVolumeToTrack(track, v);
+        }
+        for (const [identity, pb] of screenPbRef.current) {
+          const p = room.remoteParticipants.get(identity);
+          const name = p?.name ?? identity;
+          const v =
+            storedScreenVolRef.current.get(name) ?? readStoredScreenVol(name);
+          applyScreenVolumeToTrack(pb.track, v);
         }
         if (!micUnavailableRef.current) {
           await room.localParticipant.setMicrophoneEnabled(true);
@@ -871,7 +996,7 @@ export function VoiceRoom({
       void room.localParticipant
         .setScreenShareEnabled(
           true,
-          { resolution: { width, height, frameRate: fps } },
+          { resolution: { width, height, frameRate: fps }, audio: true },
           {
             videoEncoding: {
               maxBitrate: screenBitrate(fps),
@@ -938,6 +1063,15 @@ export function VoiceRoom({
     setVolumes((prev) => ({ ...prev, [identity]: clamped }));
     const track = tracksRef.current.get(identity);
     if (track && !deafenedRef.current) applyVolumeToTrack(track, clamped);
+  };
+
+  const setScreenVolume = (identity: string, name: string, v: number) => {
+    const clamped = Math.min(2, Math.max(0, v));
+    storedScreenVolRef.current.set(name, clamped);
+    writeStoredScreenVol(name, clamped);
+    setScreenVolumes((prev) => ({ ...prev, [identity]: clamped }));
+    const pb = screenPbRef.current.get(identity);
+    if (pb && !deafenedRef.current) applyScreenVolumeToTrack(pb.track, clamped);
   };
 
   const meSpeaking = meIdentity ? speakingIds.includes(meIdentity) : false;
@@ -1029,6 +1163,28 @@ export function VoiceRoom({
                 <div className="pv-member-screen">
                   <ScreenShareView track={screenTrack} muted={deafened} />
                   <span className="pv-member-screen-label">{name}</span>
+                  <div
+                    className="pv-volume pv-screen-volume"
+                    title={`Громкость трансляции ${name}`}
+                  >
+                    <input
+                      type="range"
+                      min={0}
+                      max={200}
+                      step={5}
+                      value={Math.round((screenVolumes[p.identity] ?? 1) * 100)}
+                      onChange={(e) =>
+                        setScreenVolume(
+                          p.identity,
+                          name,
+                          Number(e.target.value) / 100,
+                        )
+                      }
+                    />
+                    <span className="pv-volume-val">
+                      {Math.round((screenVolumes[p.identity] ?? 1) * 100)}%
+                    </span>
+                  </div>
                 </div>
               )}
             </div>
