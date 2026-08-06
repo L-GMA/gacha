@@ -85,6 +85,23 @@ function LeaveIcon() {
   );
 }
 
+function ScreenShareView({ track, muted }: { track: Track; muted: boolean }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    track.attach(el);
+    void el.play().catch(() => {});
+    return () => {
+      track.detach(el);
+    };
+  }, [track]);
+  useEffect(() => {
+    if (ref.current) ref.current.muted = muted;
+  }, [muted]);
+  return <video ref={ref} autoPlay playsInline />;
+}
+
 export type VoiceStatus = {
   connected: boolean;
   channelName: string;
@@ -140,6 +157,10 @@ export function VoiceRoom({
   const [error, setError] = useState("");
   const [ping, setPing] = useState<number | null>(null);
   const [volumes, setVolumes] = useState<Record<string, number>>({});
+  const [sharingScreen, setSharingScreen] = useState(false);
+  const [screens, setScreens] = useState<
+    { identity: string; track: Track; isMe: boolean }[]
+  >([]);
   const roomRef = useRef<Room | null>(null);
   const meIdentityRef = useRef<string | null>(null);
   const deafenedRef = useRef(false);
@@ -155,6 +176,8 @@ export function VoiceRoom({
   const storedVolumesRef = useRef<Map<string, number>>(new Map());
   const lastAboveRef = useRef<Map<string, number>>(new Map());
   const prevSpeakingRef = useRef<string[]>([]);
+  const screensRef = useRef<Map<string, Track>>(new Map());
+  const screenBusyRef = useRef(false);
 
   const volumeStorageKey = (name: string) => `gacha.voice.volumes.${name}`;
 
@@ -203,6 +226,16 @@ export function VoiceRoom({
     const refresh = () => {
       if (!alive || !room) return;
       setParticipants(Array.from(room.remoteParticipants.values()));
+    };
+
+    const syncScreens = () => {
+      if (!alive) return;
+      const me = meIdentityRef.current;
+      const list: { identity: string; track: Track; isMe: boolean }[] = [];
+      screensRef.current.forEach((track, identity) => {
+        list.push({ identity, track, isMe: identity === me });
+      });
+      setScreens(list);
     };
 
     const attachAudio = (track: Track, participant: RemoteParticipant) => {
@@ -273,6 +306,7 @@ export function VoiceRoom({
       const target = new Map<string, Track>();
       for (const [identity, rp] of room.remoteParticipants) {
         for (const pub of rp.audioTrackPublications.values()) {
+          if (pub.source !== Track.Source.Microphone) continue;
           if (pub.isSubscribed && pub.track) {
             target.set(identity, pub.track);
             break;
@@ -284,9 +318,17 @@ export function VoiceRoom({
         const meTracks = Array.from(
           room.localParticipant.audioTrackPublications.values(),
         );
-        const activeMe = meTracks.find(
-          (p) => p.track?.kind === "audio" && !p.track.mediaStreamTrack?.muted,
-        ) ?? meTracks.find((p) => p.track?.kind === "audio");
+        const activeMe =
+          meTracks.find(
+            (p) =>
+              p.source === Track.Source.Microphone &&
+              p.track?.kind === "audio" &&
+              !p.track.mediaStreamTrack?.muted,
+          ) ??
+          meTracks.find(
+            (p) =>
+              p.source === Track.Source.Microphone && p.track?.kind === "audio",
+          );
         if (activeMe?.track) target.set(me, activeMe.track);
       }
       for (const [identity, track] of target) {
@@ -353,16 +395,62 @@ export function VoiceRoom({
         room.on(RoomEvent.ParticipantDisconnected, (p) => {
           removeAnalyser(p.identity);
           tracksRef.current.delete(p.identity);
+          const t = screensRef.current.get(p.identity);
+          if (t) {
+            for (const el of t.detach()) el.remove();
+            screensRef.current.delete(p.identity);
+            syncScreens();
+          }
           playLeaveSound();
           refresh();
         });
-        room.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
-          if (track.kind === "audio") attachAudio(track, participant);
+        room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
+          if (track.kind === "audio") {
+            if (pub.source !== Track.Source.ScreenShareAudio) {
+              attachAudio(track, participant);
+            }
+          } else if (pub.source === Track.Source.ScreenShare) {
+            screensRef.current.set(participant.identity, track);
+            syncScreens();
+          }
           refresh();
         });
-        room.on(RoomEvent.TrackUnsubscribed, (track, _pub, participant) => {
-          if (track.kind === "audio") detachAudio(track, participant);
+        room.on(RoomEvent.TrackUnsubscribed, (track, pub, participant) => {
+          if (track.kind === "audio") {
+            if (pub.source !== Track.Source.ScreenShareAudio) {
+              detachAudio(track, participant);
+            }
+          } else if (pub.source === Track.Source.ScreenShare) {
+            const cur = screensRef.current.get(participant.identity);
+            if (cur === track) {
+              for (const el of track.detach()) el.remove();
+              screensRef.current.delete(participant.identity);
+              syncScreens();
+            }
+          }
           refresh();
+        });
+        room.on(RoomEvent.LocalTrackPublished, (pub) => {
+          if (pub.source === Track.Source.ScreenShare && pub.track) {
+            const me = meIdentityRef.current;
+            if (me) {
+              screensRef.current.set(me, pub.track);
+              setSharingScreen(true);
+              syncScreens();
+            }
+          }
+        });
+        room.on(RoomEvent.LocalTrackUnpublished, (pub) => {
+          if (pub.source === Track.Source.ScreenShare) {
+            const me = meIdentityRef.current;
+            const cur = me ? screensRef.current.get(me) : undefined;
+            if (cur) {
+              for (const el of cur.detach()) el.remove();
+              if (me) screensRef.current.delete(me);
+            }
+            setSharingScreen(false);
+            syncScreens();
+          }
         });
         room.on(RoomEvent.TrackMuted, () => {
           syncMic();
@@ -498,6 +586,13 @@ export function VoiceRoom({
       tracksRef.current.clear();
       preTrackRef.current?.stop();
       preTrackRef.current = null;
+      if (room) {
+        void room.localParticipant.setScreenShareEnabled(false).catch(() => {});
+      }
+      for (const [, t] of screensRef.current) {
+        for (const el of t.detach()) el.remove();
+      }
+      screensRef.current.clear();
       room?.disconnect();
       roomRef.current = null;
       onStatus?.(null);
@@ -582,6 +677,18 @@ export function VoiceRoom({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка");
     }
+  };
+
+  const toggleScreenShare = () => {
+    const room = roomRef.current;
+    if (!room || screenBusyRef.current) return;
+    screenBusyRef.current = true;
+    void room.localParticipant
+      .setScreenShareEnabled(!sharingScreen)
+      .catch(() => {})
+      .finally(() => {
+        screenBusyRef.current = false;
+      });
   };
 
   const leave = () => {
@@ -681,6 +788,23 @@ export function VoiceRoom({
         })}
       </div>
 
+      {screens.length > 0 && (
+        <div className="pv-screens">
+          {screens.map((s) => {
+            const p = participants.find((x) => x.identity === s.identity);
+            const name = s.isMe
+              ? `${meName} — ваш экран`
+              : `${p?.name ?? s.identity} — экран`;
+            return (
+              <div className="pv-screen" key={s.identity}>
+                <ScreenShareView track={s.track} muted={s.isMe || deafened} />
+                <span className="pv-screen-label">{name}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {micUnavailable && (
         <p className="modal-note">
           Микрофон недоступен — вы слышите других, но вас не слышно.
@@ -715,7 +839,16 @@ export function VoiceRoom({
           >
             {deafened ? <DeafenOffIcon /> : <DeafenIcon />}
           </button>
-          <button className="voice-ctl" disabled title="Демонстрация экрана (скоро)">
+          <button
+            className={`voice-ctl ${sharingScreen ? "active" : ""}`}
+            onClick={toggleScreenShare}
+            disabled={!connected}
+            title={
+              sharingScreen
+                ? "Остановить демонстрацию экрана"
+                : "Демонстрация экрана"
+            }
+          >
             <ScreenShareIcon />
           </button>
         </div>
