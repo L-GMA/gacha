@@ -83,7 +83,7 @@ export function UserSettings({
             ×
           </button>
         </header>
-        <div className="us-content-body">
+        <div className="us-content-body" key={section}>
           {section === "profile" && <ProfileSection me={me} onChanged={onChanged} />}
           {section === "sound" && <SoundSection />}
           {section === "camera" && <CameraSection />}
