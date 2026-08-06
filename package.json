@@ -35,13 +35,10 @@
       {
         "provider": "github",
         "owner": "L-GMA",
-        "repo": "gacha"
+        "repo": "gacha",
+        "releaseType": "release"
       }
     ],
-    "releaseInfo": {
-      "draft": false,
-      "prerelease": false
-    },
     "win": {
       "target": [
         { "target": "nsis", "arch": ["x64"] }
