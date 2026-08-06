@@ -165,11 +165,11 @@ function ProfileSection({ me, onChanged }: { me: User; onChanged: () => void }) 
       <div className="us-group">
         <div className="us-group-head">Профиль</div>
         <div className="us-stack">
-          <label className="us-setting-row us-row-field">
+          <label className="us-setting-row us-row-field us-row-field-stacked">
             <span className="us-field-label">Ник</span>
             <input value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder={me.login} maxLength={32} />
           </label>
-          <label className="us-setting-row us-row-field">
+          <label className="us-setting-row us-row-field us-row-field-stacked">
             <span className="us-field-label">Аватар</span>
             <input value={avatar} onChange={(e) => setAvatar(e.target.value)} placeholder="https://…" />
           </label>
