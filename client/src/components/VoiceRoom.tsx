@@ -1001,17 +1001,33 @@ export function VoiceRoom({
       try {
         const stream = await navigator.mediaDevices.getDisplayMedia({
           video: { frameRate: { ideal: fps } },
-          audio: true,
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+          },
         });
         if (!roomRef.current) {
           for (const t of stream.getTracks()) t.stop();
           return;
         }
         const rawVideo = stream.getVideoTracks()[0] ?? null;
-        const rawAudio = stream.getAudioTracks()[0] ?? null;
+        let rawAudio = stream.getAudioTracks()[0] ?? null;
         if (!rawVideo) {
           for (const t of stream.getTracks()) t.stop();
           return;
+        }
+        if (!rawAudio && isDesktopApp) {
+          try {
+            const loopback = await navigator.mediaDevices.getUserMedia({
+              audio: {
+                mandatory: { chromeMediaSource: "desktop" },
+              } as unknown as MediaTrackConstraints,
+            });
+            rawAudio = loopback.getAudioTracks()[0] ?? null;
+          } catch {
+            /* системное аудио недоступно */
+          }
         }
         const canvas = document.createElement("canvas");
         canvas.width = width;
@@ -1036,10 +1052,9 @@ export function VoiceRoom({
         await videoEl.play().catch(() => {});
         await ready;
         let running = true;
-        let raf = 0;
+        let drawTimer: ReturnType<typeof setInterval> | null = null;
         const draw = () => {
           if (!running) return;
-          raf = requestAnimationFrame(draw);
           try {
             gctx.drawImage(videoEl, 0, 0, width, height);
           } catch {
@@ -1047,6 +1062,7 @@ export function VoiceRoom({
           }
         };
         draw();
+        drawTimer = setInterval(draw, 1000 / fps);
         const outStream = canvas.captureStream(fps);
         const outVideo = outStream.getVideoTracks()[0];
         const localVideo = new LocalVideoTrack(outVideo);
@@ -1068,7 +1084,7 @@ export function VoiceRoom({
         }
         if (!roomRef.current) {
           running = false;
-          cancelAnimationFrame(raf);
+          if (drawTimer) clearInterval(drawTimer);
           localVideo.stop();
           localAudio?.stop();
           videoEl.remove();
@@ -1079,7 +1095,7 @@ export function VoiceRoom({
           stop: () => {
             if (!running) return;
             running = false;
-            cancelAnimationFrame(raf);
+            if (drawTimer) clearInterval(drawTimer);
             void room.localParticipant.unpublishTrack(localVideo).catch(() => {});
             if (localAudio)
               void room.localParticipant

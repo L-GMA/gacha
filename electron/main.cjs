@@ -52,6 +52,7 @@ function openMainWindow() {
       nodeIntegration: false,
       sandbox: true,
       spellcheck: false,
+      backgroundThrottling: false,
     },
   });
 
