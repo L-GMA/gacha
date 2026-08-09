@@ -11,7 +11,9 @@ const livekitHttp = config.livekit.url.replace(
   (scheme) => (scheme === "wss://" || scheme === "https://" ? "https://" : "http://"),
 );
 
-async function listRoomParticipants(room: string): Promise<{ identity: string }[]> {
+async function listRoomParticipants(
+  room: string,
+): Promise<{ identity: string; attributes?: Record<string, string> }[]> {
   const token = issueLiveKitAdminToken({
     apiKey: config.livekit.apiKey,
     apiSecret: config.livekit.apiSecret,
@@ -31,7 +33,10 @@ async function listRoomParticipants(room: string): Promise<{ identity: string }[
       },
     );
     const body = (await res.json()) as {
-      participants?: { identity: string }[];
+      participants?: {
+        identity: string;
+        attributes?: Record<string, string>;
+      }[];
     };
     return Array.isArray(body.participants) ? body.participants : [];
   } catch {
@@ -55,15 +60,90 @@ async function getUserVoiceAttributes(
     );
     const row = res.rows[0];
     if (!row) return {};
-    const attrs: Record<string, string> = {};
-    attrs.nickname = row.nickname || row.login;
-    if (row.avatar) attrs.avatar = row.avatar;
-    if (row.join_sound_url) attrs.joinSound = row.join_sound_url;
-    if (row.leave_sound_url) attrs.leaveSound = row.leave_sound_url;
-    return attrs;
+    return voiceAttrsFromRow(row);
   } catch {
     return {};
   }
+}
+
+const CLIENT_ATTR_KEYS = ["gacha_muted", "gacha_deafened", "gacha_ptt"];
+
+async function syncRoomParticipantAttributes(room: string): Promise<void> {
+  try {
+    const participants = await listRoomParticipants(room);
+    if (participants.length === 0) return;
+    const userIds = Array.from(
+      new Set(
+        participants
+          .map((p) => (p.identity ?? "").split("--")[0])
+          .filter(Boolean),
+      ),
+    );
+    if (userIds.length === 0) return;
+    const rows = await query<{
+      id: string;
+      login: string;
+      nickname: string | null;
+      avatar: string | null;
+      join_sound_url: string | null;
+      leave_sound_url: string | null;
+    }>(
+      "SELECT id, login, nickname, avatar, join_sound_url, leave_sound_url FROM users WHERE id = ANY($1::uuid[])",
+      [userIds],
+    );
+    const attrsByUser = new Map(
+      rows.rows.map((r) => [r.id, voiceAttrsFromRow(r)]),
+    );
+    const token = issueLiveKitAdminToken({
+      apiKey: config.livekit.apiKey,
+      apiSecret: config.livekit.apiSecret,
+      room,
+    });
+    await Promise.all(
+      participants.map(async (p) => {
+        const userId = (p.identity ?? "").split("--")[0];
+        const dbAttrs = attrsByUser.get(userId);
+        if (!dbAttrs) return;
+        const merged = { ...dbAttrs };
+        for (const key of CLIENT_ATTR_KEYS) {
+          if (p.attributes?.[key] != null) merged[key] = p.attributes[key];
+        }
+        await fetch(
+          `${livekitHttp}/twirp/livekit.RoomService/UpdateParticipant`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              room,
+              identity: p.identity,
+              attributes: merged,
+            }),
+            signal: AbortSignal.timeout(3000),
+          },
+        );
+      }),
+    );
+  } catch {
+    /* не критично — участник получит актуальные атрибуты при следующем заходе */
+  }
+}
+
+function voiceAttrsFromRow(row: {
+  login: string;
+  nickname: string | null;
+  avatar: string | null;
+  join_sound_url: string | null;
+  leave_sound_url: string | null;
+}): Record<string, string> {
+  const attrs: Record<string, string> = {};
+  attrs.nickname = row.nickname || row.login;
+  if (row.avatar) attrs.avatar = row.avatar;
+  if (row.join_sound_url) attrs.joinSound = row.join_sound_url;
+  if (row.leave_sound_url) attrs.leaveSound = row.leave_sound_url;
+  return attrs;
 }
 
 export async function voiceRoutes(app: FastifyInstance) {
@@ -98,6 +178,7 @@ export async function voiceRoutes(app: FastifyInstance) {
       room,
       attributes: attrs,
     });
+    void syncRoomParticipantAttributes(room);
     return { token, url: config.livekit.url, room };
   });
 

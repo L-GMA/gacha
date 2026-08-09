@@ -181,7 +181,7 @@ function ProfileSection({ me, onChanged }: { me: User; onChanged: () => void }) 
     setSaving(true);
     setSaved(false);
     try {
-      await api.updateMe(nickname.trim() || null, avatar.trim() || null, bio.trim() || null);
+      await api.updateMe(nickname.trim() || null, avatar.trim(), bio.trim() || null);
       onChanged();
       setSaved(true);
     } catch (err) {
