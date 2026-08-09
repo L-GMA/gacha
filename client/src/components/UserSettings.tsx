@@ -475,7 +475,8 @@ function SoundSection() {
               <span>Режим микрофона</span>
               <small>
                 Режим голоса — микрофон работает постоянно. Режим рации — говорите,
-                пока зажата клавиша или кнопка микрофона.
+                пока зажата клавиша или кнопка микрофона. Рация независима от мута
+                и оглушения: они не блокируют передачу.
               </small>
             </div>
             <select
@@ -489,6 +490,28 @@ function SoundSection() {
               <option value="ptt">Режим рации</option>
             </select>
           </div>
+          <RangeRow
+            label="Задержка после отпускания"
+            hint="Сколько секунд микрофон остаётся открытым после отпускания клавиши рации"
+            min={1}
+            max={10}
+            step={1}
+            value={settings.pttTailSec}
+            disabled={settings.voiceMode !== "ptt"}
+            onChange={(v) => setSetting("pttTailSec", v)}
+            format={(v) => `${v} сек`}
+          />
+          <RangeRow
+            label="Громкость щелчка рации"
+            hint="Звук при нажатии и отпускании клавиши рации (0 — выключен)"
+            min={0}
+            max={100}
+            step={5}
+            value={settings.pttSoundVol}
+            disabled={settings.voiceMode !== "ptt"}
+            onChange={(v) => setSetting("pttSoundVol", v)}
+            format={(v) => `${v}%`}
+          />
         </div>
         <MicLevelMeter settings={settings} />
       </div>

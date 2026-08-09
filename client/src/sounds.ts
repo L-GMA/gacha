@@ -45,7 +45,7 @@ const makeAudio = (src: string): Promise<HTMLAudioElement> => {
     });
 };
 
-const playAudioInternal = (src: string) => {
+const playAudioInternal = (src: string, volume = 1) => {
   let p = audioCache.get(src);
   if (!p) {
     p = makeAudio(src);
@@ -53,6 +53,7 @@ const playAudioInternal = (src: string) => {
   }
   void p.then((el) => {
     try {
+      el.volume = volume;
       el.currentTime = 0;
       void el.play().catch(() => {});
     } catch {
@@ -85,6 +86,17 @@ export const playLeaveSound = makePlayer("./sounds/voice-leave.wav", "leave");
 export const playCustomSound = (url: string) => {
   try {
     playAudioInternal(url);
+  } catch {
+    /* ignore */
+  }
+};
+
+// Щелчок при нажатии/отпускании клавиши рации — только для самого говорящего.
+export const playPttSound = () => {
+  try {
+    const vol = getSettings().pttSoundVol;
+    if (vol <= 0) return;
+    playAudioInternal("./sounds/ptt-press.mp3", vol / 100);
   } catch {
     /* ignore */
   }

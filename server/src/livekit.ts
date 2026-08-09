@@ -14,19 +14,22 @@ export function issueLiveKitToken(opts: LiveKitTokenOptions): string {
   const now = Math.floor(Date.now() / 1000);
   const ttl = opts.ttlSeconds ?? 60 * 60;
   const header = { alg: "HS256", typ: "JWT", kid: opts.apiKey };
+  const hasAttrs =
+    !!opts.attributes && Object.keys(opts.attributes).length > 0;
   const payload = {
     iss: opts.apiKey,
     sub: opts.identity,
     name: opts.name ?? opts.identity,
     nbf: now - 10,
     exp: now + ttl,
+    // Атрибуты участника кладём и на верхний уровень, и в video.grant:
+    // наш livekit-сервер применяет только верхнеуровневые (video.attributes игнорируются).
+    ...(hasAttrs ? { attributes: opts.attributes } : {}),
     video: {
       room: opts.room,
       roomJoin: true,
       canUpdateOwnMetadata: true,
-      ...(opts.attributes && Object.keys(opts.attributes).length > 0
-        ? { attributes: opts.attributes }
-        : {}),
+      ...(hasAttrs ? { attributes: opts.attributes } : {}),
     },
   };
   const headerB64 = Buffer.from(JSON.stringify(header)).toString("base64url");

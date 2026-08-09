@@ -10,7 +10,7 @@ import {
 } from "livekit-client";
 import { api } from "../api.js";
 import { Avatar } from "./Avatar.js";
-import { playJoinSound, playLeaveSound } from "../sounds.js";
+import { playJoinSound, playLeaveSound, playPttSound } from "../sounds.js";
 import { DeafenOffMiniIcon, MicOffMiniIcon } from "./stateIcons.js";
 import { getSettings, subscribeSettings } from "../settings.js";
 import { applyKrisp } from "../krisp.js";
@@ -30,11 +30,17 @@ type PlaybackCtx = {
 
 const SPEAKING_THRESHOLD = 0.02;
 const SPEAKING_HANG_MS = 350;
-const PTT_TAIL_MS = 2000;
 
 const isDesktopApp =
   typeof window !== "undefined" &&
   typeof window.gachaScreen?.pick === "function";
+
+// Относительные пути аватарок в десктопе (file:// страница) не грузятся —
+// приводим их к абсолютному URL.
+const absAssetUrl = (u: string | null | undefined): string | null => {
+  if (!u) return null;
+  return u.startsWith("/") ? `https://gachandra.ru${u}` : u;
+};
 
 const screenBitrate = (fps: 30 | 60 | 90, quality: "720" | "1080"): number => {
   const base = quality === "1080" ? 8_000_000 : 5_000_000;
@@ -1116,12 +1122,11 @@ export function VoiceRoom({
     if (!room) return;
     const mode = getSettings().voiceMode;
     let wantOn: boolean;
-    if (deafenedRef.current) {
-      wantOn = false;
-    } else if (mode === "ptt") {
+    if (mode === "ptt") {
+      // Режим рации независим от системы мута: мут/оглушение не блокируют передачу.
       wantOn = pttHeldRef.current || micLatchRef.current || pttTailRef.current;
     } else {
-      wantOn = !mutedRef.current;
+      wantOn = !mutedRef.current && !deafenedRef.current;
     }
     if (wantOn !== room.localParticipant.isMicrophoneEnabled) {
       try {
@@ -1150,33 +1155,36 @@ export function VoiceRoom({
       pttTailRef.current = false;
     }
     pttHeldRef.current = true;
+    playPttSound();
     void recomputeMic();
   };
 
   const pttRelease = () => {
     if (!pttHeldRef.current) return;
     pttHeldRef.current = false;
+    playPttSound();
     if (micLatchRef.current) {
       void recomputeMic();
       return;
     }
+    const tailMs = Math.max(1, Math.min(10, getSettings().pttTailSec)) * 1000;
     pttTailRef.current = true;
     if (pttTailTimerRef.current) clearTimeout(pttTailTimerRef.current);
     pttTailTimerRef.current = setTimeout(() => {
       pttTailTimerRef.current = null;
       pttTailRef.current = false;
       void recomputeMic();
-    }, PTT_TAIL_MS);
+    }, tailMs);
     void recomputeMic();
   };
 
   const toggleMic = async () => {
     const room = roomRef.current;
     if (!room) return;
-    if (deafenedRef.current) return;
     if (getSettings().voiceMode === "ptt") {
       micLatchRef.current = !micLatchRef.current;
     } else {
+      if (deafenedRef.current) return;
       mutedRef.current = !mutedRef.current;
     }
     await recomputeMic();
@@ -1478,7 +1486,7 @@ export function VoiceRoom({
       <div className="pv-members">
         <div className={`pv-member ${meSpeaking ? "speaking" : ""}`}>
           <div className="pv-member-row">
-            <Avatar src={meAvatar} name={meName} size={40} online />
+            <Avatar src={absAssetUrl(meAvatar)} name={meName} size={40} online />
             <span className="pv-member-name">{meName}</span>
             <span className="pv-member-owner">вы</span>
             {voiceMode === "ptt" && (
@@ -1519,7 +1527,7 @@ export function VoiceRoom({
               className={`pv-member ${speakingIds.includes(p.identity) ? "speaking" : ""}`}
             >
               <div className="pv-member-row">
-                <Avatar src={p.attributes?.avatar ?? null} name={name} size={40} online />
+                <Avatar src={absAssetUrl(p.attributes?.avatar ?? null)} name={name} size={40} online />
                 <span className="pv-member-name">{name}</span>
                 {(!p.isMicrophoneEnabled || p.attributes?.gacha_muted === "1") && (
                   <span className="pv-member-ico" title="Микрофон выключен">

@@ -25,6 +25,8 @@ export type UserSettings = {
   micEchoCancellation: boolean;
   micAutoGainControl: boolean;
   voiceMode: VoiceMode;
+  pttTailSec: number;
+  pttSoundVol: number;
   hotkeys: Hotkeys;
 };
 
@@ -46,6 +48,8 @@ const DEFAULTS: UserSettings = {
   micEchoCancellation: true,
   micAutoGainControl: true,
   voiceMode: "voice",
+  pttTailSec: 2,
+  pttSoundVol: 50,
   hotkeys: { ptt: "", mute: "", deafen: "" },
 };
 
