@@ -1,5 +1,13 @@
 export type KrispQuality = "low" | "medium" | "high";
 
+export type VoiceMode = "voice" | "ptt";
+
+export type Hotkeys = {
+  ptt: string;
+  mute: string;
+  deafen: string;
+};
+
 export type UserSettings = {
   sounds: boolean;
   notifications: boolean;
@@ -8,6 +16,8 @@ export type UserSettings = {
   micGain: number;
   krisp: boolean;
   krispQuality: KrispQuality;
+  voiceMode: VoiceMode;
+  hotkeys: Hotkeys;
 };
 
 const KEY = "gacha.settings";
@@ -19,6 +29,8 @@ const DEFAULTS: UserSettings = {
   micGain: 1,
   krisp: true,
   krispQuality: "medium",
+  voiceMode: "voice",
+  hotkeys: { ptt: "", mute: "", deafen: "" },
 };
 
 let current: UserSettings = (() => {

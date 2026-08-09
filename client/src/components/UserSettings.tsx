@@ -10,6 +10,7 @@ import { highestRoleColor } from "../roleColor.js";
 import { Avatar } from "./Avatar.js";
 import { Toggle } from "./Toggle.js";
 import { getSettings, setSetting, subscribeSettings } from "../settings.js";
+import { hotkeyLabel, isModifierKey } from "../hotkeys.js";
 import {
   openMicGraph,
   setGraphGain,
@@ -20,13 +21,14 @@ import {
   type MicGraph,
 } from "../micPipeline.js";
 
-type SectionId = "profile" | "sound" | "camera" | "notifications";
+type SectionId = "profile" | "sound" | "camera" | "notifications" | "hotkeys";
 
 const SECTIONS: { id: SectionId; label: string }[] = [
   { id: "profile", label: "Настройка профиля" },
   { id: "sound", label: "Настройка звука" },
   { id: "camera", label: "Настройка камеры" },
   { id: "notifications", label: "Уведомления" },
+  { id: "hotkeys", label: "Горячие клавиши" },
 ];
 
 function SectionIcon({ id }: { id: SectionId }) {
@@ -58,6 +60,17 @@ function SectionIcon({ id }: { id: SectionId }) {
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
           <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+      );
+    case "hotkeys":
+      return (
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="2" y="6" width="20" height="12" rx="2" />
+          <path d="M6 10h.01" />
+          <path d="M10 10h.01" />
+          <path d="M14 10h.01" />
+          <path d="M18 10h.01" />
+          <path d="M8 14h8" />
         </svg>
       );
   }
@@ -105,6 +118,7 @@ export function UserSettings({
           {section === "notifications" && (
             <NotificationsSection me={me} onChanged={onChanged} />
           )}
+          {section === "hotkeys" && <HotkeysSection />}
         </div>
       </section>
     </div>
@@ -405,6 +419,27 @@ function SoundSection() {
   return (
     <div className="us-group">
       <div className="us-group-head">Голос</div>
+      <div className="us-stack">
+        <div className="us-setting-row">
+          <div className="us-setting-text">
+            <span>Режим микрофона</span>
+            <small>
+              Режим голоса — микрофон работает постоянно. Режим рации — говорите,
+              пока зажата клавиша или кнопка микрофона.
+            </small>
+          </div>
+          <select
+            className="us-select"
+            value={settings.voiceMode}
+            onChange={(e) =>
+              setSetting("voiceMode", e.target.value as "voice" | "ptt")
+            }
+          >
+            <option value="voice">Режим голоса</option>
+            <option value="ptt">Режим рации</option>
+          </select>
+        </div>
+      </div>
       <MicLevelMeter settings={settings} />
       <div className="us-stack">
         <DeviceSelect
@@ -739,6 +774,120 @@ function SoundUploadRow({
             onPick(file);
           }}
         />
+      </div>
+    </div>
+  );
+}
+
+type HotkeyTarget = "ptt" | "mute" | "deafen";
+
+function HotkeysSection() {
+  const [settings, setLocal] = useState(getSettings());
+  const [capturing, setCapturing] = useState<HotkeyTarget | null>(null);
+
+  useEffect(() => subscribeSettings(() => setLocal(getSettings())), []);
+
+  useEffect(() => {
+    if (!capturing) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (isModifierKey(e.code)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.code === "Escape") {
+        setCapturing(null);
+        return;
+      }
+      const hk = { ...getSettings().hotkeys };
+      hk[capturing] = e.code;
+      setSetting("hotkeys", hk);
+      setCapturing(null);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [capturing]);
+
+  const clearKey = (target: HotkeyTarget) => {
+    const hk = { ...getSettings().hotkeys };
+    hk[target] = "";
+    setSetting("hotkeys", hk);
+  };
+
+  return (
+    <div className="us-group">
+      <div className="us-group-head">Горячие клавиши</div>
+      <div className="us-stack">
+        <HotkeyRow
+          label="Клавиша рации"
+          hint="Зажать и говорить (только в режиме рации)"
+          value={settings.hotkeys.ptt}
+          disabled={settings.voiceMode !== "ptt"}
+          capturing={capturing === "ptt"}
+          onCapture={() => setCapturing("ptt")}
+          onClear={() => clearKey("ptt")}
+        />
+        <HotkeyRow
+          label="Мут микрофона"
+          hint="Нажал — включил, ещё раз — выключил"
+          value={settings.hotkeys.mute}
+          capturing={capturing === "mute"}
+          onCapture={() => setCapturing("mute")}
+          onClear={() => clearKey("mute")}
+        />
+        <HotkeyRow
+          label="Оглушение"
+          hint="Нажал — оглушил, ещё раз — снял"
+          value={settings.hotkeys.deafen}
+          capturing={capturing === "deafen"}
+          onCapture={() => setCapturing("deafen")}
+          onClear={() => clearKey("deafen")}
+        />
+      </div>
+      <p className="hint">
+        Нажмите на кнопку, затем нажмите нужную клавишу на клавиатуре. Esc — отмена.
+        Горячие клавиши работают, когда вы находитесь в голосовом канале, и не срабатывают,
+        пока вы вводите текст.
+      </p>
+    </div>
+  );
+}
+
+function HotkeyRow({
+  label,
+  hint,
+  value,
+  disabled,
+  capturing,
+  onCapture,
+  onClear,
+}: {
+  label: string;
+  hint: string;
+  value: string;
+  disabled?: boolean;
+  capturing: boolean;
+  onCapture: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="us-setting-row">
+      <div className="us-setting-text">
+        <span>{label}</span>
+        <small>{hint}</small>
+      </div>
+      <div className="us-sound-actions">
+        <button
+          className={`btn small hotkey-capture ${capturing ? "recording" : ""}`}
+          type="button"
+          disabled={disabled || capturing}
+          onClick={onCapture}
+        >
+          {capturing ? "Нажмите клавишу…" : value ? hotkeyLabel(value) : "Не задано"}
+        </button>
+        {value && !capturing && (
+          <button className="btn small ghost" type="button" disabled={disabled} onClick={onClear}>
+            Сбросить
+          </button>
+        )}
       </div>
     </div>
   );

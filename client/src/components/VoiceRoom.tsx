@@ -15,6 +15,7 @@ import { DeafenOffMiniIcon, MicOffMiniIcon } from "./stateIcons.js";
 import { getSettings, subscribeSettings } from "../settings.js";
 import { applyKrisp } from "../krisp.js";
 import { getVoiceMicGraph, switchMicGraphDevice } from "../micPipeline.js";
+import { hotkeyLabel, isTypingTarget } from "../hotkeys.js";
 
 type RemoteAudioTrackLike = {
   setVolume(volume: number): void;
@@ -219,6 +220,7 @@ export function VoiceRoom({
   const [audioBlocked, setAudioBlocked] = useState(false);
   const [error, setError] = useState("");
   const [ping, setPing] = useState<number | null>(null);
+  const [voiceMode, setVoiceMode] = useState(getSettings().voiceMode);
   const [volumes, setVolumes] = useState<Record<string, number>>({});
   const [screenVolumes, setScreenVolumes] = useState<Record<string, number>>({});
   const [sharingScreen, setSharingScreen] = useState(false);
@@ -236,6 +238,9 @@ export function VoiceRoom({
   const roomRef = useRef<Room | null>(null);
   const meIdentityRef = useRef<string | null>(null);
   const deafenedRef = useRef(false);
+  const mutedRef = useRef(false);
+  const pttHeldRef = useRef(false);
+  const micLatchRef = useRef(false);
   const micUnavailableRef = useRef(false);
   const micPendingRef = useRef(false);
   const preTrackRef = useRef<MediaStreamTrack | null>(null);
@@ -488,7 +493,9 @@ export function VoiceRoom({
 
     const syncMic = () => {
       if (alive && room && !deafenedRef.current) {
-        setMuted(!room.localParticipant.isMicrophoneEnabled);
+        const actual = room.localParticipant.isMicrophoneEnabled;
+        mutedRef.current = !actual;
+        setMuted(!actual);
       }
     };
 
@@ -778,10 +785,15 @@ export function VoiceRoom({
           micUnavailableRef.current = true;
           setMicUnavailable(true);
           micPendingRef.current = false;
-        } else if (!(await enableMic())) {
-          micPendingRef.current = true;
+        } else if (getSettings().voiceMode !== "ptt") {
+          if (!(await enableMic())) {
+            micPendingRef.current = true;
+          }
         }
-        if (alive) syncMic();
+        if (alive) {
+          await recomputeMic();
+          syncMic();
+        }
 
         unsubKrisp = subscribeSettings(() => {
           if (!alive) return;
@@ -836,7 +848,7 @@ export function VoiceRoom({
               })
               .catch(() => {});
           }
-          if (micPendingRef.current) {
+          if (micPendingRef.current && getSettings().voiceMode !== "ptt") {
             void enableMic().then((ok) => {
               if (!alive) return;
               if (ok) {
@@ -959,20 +971,109 @@ export function VoiceRoom({
     };
   }, []);
 
+  useEffect(
+    () =>
+      subscribeSettings(() => {
+        const mode = getSettings().voiceMode;
+        setVoiceMode(mode);
+        if (mode !== "ptt" && pttHeldRef.current) {
+          pttHeldRef.current = false;
+        }
+        void recomputeMic();
+      }),
+    [],
+  );
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      if (isTypingTarget(e.target)) return;
+      const hk = getSettings().hotkeys;
+      if (hk.deafen && e.code === hk.deafen) {
+        e.preventDefault();
+        void toggleDeafen();
+        return;
+      }
+      if (hk.mute && e.code === hk.mute) {
+        e.preventDefault();
+        void toggleMic();
+        return;
+      }
+      if (hk.ptt && e.code === hk.ptt && getSettings().voiceMode === "ptt") {
+        e.preventDefault();
+        pttPress();
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      const hk = getSettings().hotkeys;
+      if (hk.ptt && e.code === hk.ptt) pttRelease();
+    };
+    const releasePtt = () => pttRelease();
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", releasePtt);
+    document.addEventListener("visibilitychange", releasePtt);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", releasePtt);
+      document.removeEventListener("visibilitychange", releasePtt);
+    };
+  }, []);
+
+  const recomputeMic = async () => {
+    const room = roomRef.current;
+    if (!room) return;
+    const mode = getSettings().voiceMode;
+    let wantOn: boolean;
+    if (deafenedRef.current) {
+      wantOn = false;
+    } else if (mode === "ptt") {
+      wantOn = pttHeldRef.current || micLatchRef.current;
+    } else {
+      wantOn = !mutedRef.current;
+    }
+    if (wantOn !== room.localParticipant.isMicrophoneEnabled) {
+      try {
+        await room.localParticipant.setMicrophoneEnabled(
+          wantOn,
+          wantOn
+            ? { deviceId: getSettings().micDeviceId || { ideal: "default" } }
+            : undefined,
+        );
+      } catch (err) {
+        if (wantOn) {
+          setError(err instanceof Error ? err.message : "Ошибка");
+          return;
+        }
+      }
+    }
+    mutedRef.current = !wantOn;
+    setMuted(!wantOn);
+  };
+
+  const pttPress = () => {
+    if (getSettings().voiceMode !== "ptt") return;
+    pttHeldRef.current = true;
+    void recomputeMic();
+  };
+
+  const pttRelease = () => {
+    if (!pttHeldRef.current) return;
+    pttHeldRef.current = false;
+    void recomputeMic();
+  };
+
   const toggleMic = async () => {
     const room = roomRef.current;
     if (!room) return;
     if (deafenedRef.current) return;
-    try {
-      const next = !room.localParticipant.isMicrophoneEnabled;
-      await room.localParticipant.setMicrophoneEnabled(
-        next,
-        next ? { deviceId: getSettings().micDeviceId || { ideal: "default" } } : undefined,
-      );
-      setMuted(!next);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Ошибка");
+    if (getSettings().voiceMode === "ptt") {
+      micLatchRef.current = !micLatchRef.current;
+    } else {
+      mutedRef.current = !mutedRef.current;
     }
+    await recomputeMic();
   };
 
   const toggleDeafen = async () => {
@@ -983,8 +1084,6 @@ export function VoiceRoom({
     setDeafened(next);
     try {
       if (next) {
-        await room.localParticipant.setMicrophoneEnabled(false);
-        setMuted(true);
         for (const track of tracksRef.current.values())
           applyVolumeToTrack(track, 0);
         for (const [, pb] of screenPbRef.current)
@@ -1004,11 +1103,8 @@ export function VoiceRoom({
             storedScreenVolRef.current.get(name) ?? readStoredScreenVol(name);
           applyScreenVolumeToTrack(pb.track, v);
         }
-        if (!micUnavailableRef.current) {
-          await room.localParticipant.setMicrophoneEnabled(true);
-          setMuted(false);
-        }
       }
+      await recomputeMic();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка");
     }
@@ -1393,13 +1489,38 @@ export function VoiceRoom({
       )}
       {error && <p className="error">{error}</p>}
 
+      {voiceMode === "ptt" && (
+        <p className="modal-note voice-ptt-hint">
+          Режим рации: зажмите кнопку микрофона
+          {getSettings().hotkeys.ptt ? (
+            <>
+              {" "}
+              или <kbd>{hotkeyLabel(getSettings().hotkeys.ptt)}</kbd>
+            </>
+          ) : null}
+          , чтобы говорить
+        </p>
+      )}
+
       <div className="voice-controls-wrap">
         <div className="voice-controls">
           <button
             className={`voice-ctl ${muted ? "active" : ""}`}
-            onClick={toggleMic}
+            onPointerDown={voiceMode === "ptt" ? pttPress : undefined}
+            onPointerUp={voiceMode === "ptt" ? pttRelease : undefined}
+            onPointerLeave={voiceMode === "ptt" ? pttRelease : undefined}
+            onPointerCancel={voiceMode === "ptt" ? pttRelease : undefined}
+            onClick={voiceMode === "ptt" ? undefined : toggleMic}
             disabled={deafened}
-            title={muted ? "Включить микрофон" : "Выключить микрофон"}
+            title={
+              voiceMode === "ptt"
+                ? muted
+                  ? "Зажать и говорить"
+                  : "Микрофон включён — отпустите, чтобы выключить"
+                : muted
+                  ? "Включить микрофон"
+                  : "Выключить микрофон"
+            }
           >
             {muted ? <MicOffIcon /> : <MicIcon />}
           </button>
