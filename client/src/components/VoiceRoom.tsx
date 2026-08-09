@@ -238,6 +238,7 @@ export function VoiceRoom({
   const [connected, setConnected] = useState(false);
   const [muted, setMuted] = useState(false);
   const [deafened, setDeafened] = useState(false);
+  const [micActive, setMicActive] = useState(false);
   const [micUnavailable, setMicUnavailable] = useState(false);
   const [audioBlocked, setAudioBlocked] = useState(false);
   const [error, setError] = useState("");
@@ -265,7 +266,7 @@ export function VoiceRoom({
   const pttHeldRef = useRef(false);
   const pttTailRef = useRef(false);
   const pttTailTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const micLatchRef = useRef(false);
+  const micActiveRef = useRef(false);
   const micUnavailableRef = useRef(false);
   const micPendingRef = useRef(false);
   const preTrackRef = useRef<MediaStreamTrack | null>(null);
@@ -517,10 +518,9 @@ export function VoiceRoom({
     };
 
     const syncMic = () => {
-      if (alive && room && !deafenedRef.current) {
-        const actual = room.localParticipant.isMicrophoneEnabled;
-        mutedRef.current = !actual;
-        setMuted(!actual);
+      if (alive && room) {
+        micActiveRef.current = room.localParticipant.isMicrophoneEnabled;
+        setMicActive(micActiveRef.current);
       }
     };
 
@@ -817,7 +817,6 @@ export function VoiceRoom({
         }
         if (alive) {
           await recomputeMic();
-          syncMic();
         }
 
         unsubKrisp = subscribeSettings(() => {
@@ -877,7 +876,7 @@ export function VoiceRoom({
             void enableMic().then((ok) => {
               if (!alive) return;
               if (ok) {
-                syncMic();
+                void recomputeMic();
               } else {
                 micPendingRef.current = false;
                 setMicUnavailable(true);
@@ -1123,8 +1122,9 @@ export function VoiceRoom({
     const mode = getSettings().voiceMode;
     let wantOn: boolean;
     if (mode === "ptt") {
-      // Режим рации независим от системы мута: мут/оглушение не блокируют передачу.
-      wantOn = pttHeldRef.current || micLatchRef.current || pttTailRef.current;
+      // Слой рации независим от слоя мута/оглушения: передача управляется
+      // только зажатием и хвостом, мут/оглушение не блокируют её.
+      wantOn = pttHeldRef.current || pttTailRef.current;
     } else {
       wantOn = !mutedRef.current && !deafenedRef.current;
     }
@@ -1143,8 +1143,8 @@ export function VoiceRoom({
         }
       }
     }
-    mutedRef.current = !wantOn;
-    setMuted(!wantOn);
+    micActiveRef.current = room.localParticipant.isMicrophoneEnabled;
+    setMicActive(micActiveRef.current);
   };
 
   const pttPress = () => {
@@ -1163,10 +1163,6 @@ export function VoiceRoom({
     if (!pttHeldRef.current) return;
     pttHeldRef.current = false;
     playPttSound();
-    if (micLatchRef.current) {
-      void recomputeMic();
-      return;
-    }
     const tailMs = Math.max(1, Math.min(10, getSettings().pttTailSec)) * 1000;
     pttTailRef.current = true;
     if (pttTailTimerRef.current) clearTimeout(pttTailTimerRef.current);
@@ -1181,12 +1177,11 @@ export function VoiceRoom({
   const toggleMic = async () => {
     const room = roomRef.current;
     if (!room) return;
-    if (getSettings().voiceMode === "ptt") {
-      micLatchRef.current = !micLatchRef.current;
-    } else {
-      if (deafenedRef.current) return;
-      mutedRef.current = !mutedRef.current;
-    }
+    if (getSettings().voiceMode !== "ptt" && deafenedRef.current) return;
+    // Слой мута работает поверх рации: в PTT-режиме переключаем отдельный
+    // флаг, не влияющий на зажатие/хвост.
+    mutedRef.current = !mutedRef.current;
+    setMuted(mutedRef.current);
     await recomputeMic();
   };
 
@@ -1494,7 +1489,7 @@ export function VoiceRoom({
                 <PttIcon />
               </span>
             )}
-            {muted && (
+            {!micActive && (
               <span className="pv-member-ico" title="Микрофон выключен">
                 <MicOffMiniIcon />
               </span>
@@ -1632,24 +1627,24 @@ export function VoiceRoom({
       <div className="voice-controls-wrap">
         <div className="voice-controls">
           <button
-            className={`voice-ctl ${muted ? "active" : ""}`}
+            className={`voice-ctl ${micActive ? "active" : ""}`}
             onPointerDown={voiceMode === "ptt" ? pttPress : undefined}
             onPointerUp={voiceMode === "ptt" ? pttRelease : undefined}
             onPointerLeave={voiceMode === "ptt" ? pttRelease : undefined}
             onPointerCancel={voiceMode === "ptt" ? pttRelease : undefined}
             onClick={voiceMode === "ptt" ? undefined : toggleMic}
-            disabled={deafened}
+            disabled={deafened && voiceMode !== "ptt"}
             title={
               voiceMode === "ptt"
-                ? muted
-                  ? "Зажать и говорить"
-                  : "Микрофон включён — отпустите, чтобы выключить"
+                ? micActive
+                  ? "Микрофон включён — отпустите, чтобы выключить"
+                  : "Зажать и говорить"
                 : muted
                   ? "Включить микрофон"
                   : "Выключить микрофон"
             }
           >
-            {muted ? <MicOffIcon /> : <MicIcon />}
+            {micActive ? <MicIcon /> : <MicOffIcon />}
           </button>
           <button
             className={`voice-ctl ${deafened ? "active" : ""}`}
