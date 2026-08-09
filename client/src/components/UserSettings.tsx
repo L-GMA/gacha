@@ -10,7 +10,7 @@ import { highestRoleColor } from "../roleColor.js";
 import { Avatar } from "./Avatar.js";
 import { Toggle } from "./Toggle.js";
 import { getSettings, setSetting, subscribeSettings } from "../settings.js";
-import { hotkeyLabel, isModifierKey } from "../hotkeys.js";
+import { hotkeyLabel, isModifierKey, mouseHotkeyCode } from "../hotkeys.js";
 import {
   openMicGraph,
   setGraphGain,
@@ -802,8 +802,28 @@ function HotkeysSection() {
       setSetting("hotkeys", hk);
       setCapturing(null);
     };
+    const onMouse = (e: MouseEvent) => {
+      const code = mouseHotkeyCode(e.button);
+      if (!code) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const hk = { ...getSettings().hotkeys };
+      hk[capturing] = code;
+      setSetting("hotkeys", hk);
+      setCapturing(null);
+    };
+    const onContext = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
     window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
+    window.addEventListener("mousedown", onMouse, true);
+    window.addEventListener("contextmenu", onContext, true);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("mousedown", onMouse, true);
+      window.removeEventListener("contextmenu", onContext, true);
+    };
   }, [capturing]);
 
   const clearKey = (target: HotkeyTarget) => {
@@ -843,9 +863,9 @@ function HotkeysSection() {
         />
       </div>
       <p className="hint">
-        Нажмите на кнопку, затем нажмите нужную клавишу на клавиатуре. Esc — отмена.
-        Горячие клавиши работают, когда вы находитесь в голосовом канале, и не срабатывают,
-        пока вы вводите текст.
+        Нажмите на кнопку, затем нажмите нужную клавишу на клавиатуре или боковую кнопку мыши
+        (назад/вперёд, средняя тоже подойдёт). Esc — отмена. Горячие клавиши работают, когда вы
+        находитесь в голосовом канале, и не срабатывают, пока вы вводите текст (кроме кнопок мыши).
       </p>
     </div>
   );

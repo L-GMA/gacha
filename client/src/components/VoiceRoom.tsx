@@ -15,7 +15,7 @@ import { DeafenOffMiniIcon, MicOffMiniIcon } from "./stateIcons.js";
 import { getSettings, subscribeSettings } from "../settings.js";
 import { applyKrisp } from "../krisp.js";
 import { getVoiceMicGraph, switchMicGraphDevice } from "../micPipeline.js";
-import { hotkeyLabel, isTypingTarget } from "../hotkeys.js";
+import { hotkeyLabel, isTypingTarget, mouseHotkeyCode } from "../hotkeys.js";
 
 type RemoteAudioTrackLike = {
   setVolume(volume: number): void;
@@ -1008,14 +1008,42 @@ export function VoiceRoom({
       const hk = getSettings().hotkeys;
       if (hk.ptt && e.code === hk.ptt) pttRelease();
     };
+    const onMouseDown = (e: MouseEvent) => {
+      const code = mouseHotkeyCode(e.button);
+      if (!code) return;
+      const hk = getSettings().hotkeys;
+      if (hk.deafen === code) {
+        e.preventDefault();
+        void toggleDeafen();
+        return;
+      }
+      if (hk.mute === code) {
+        e.preventDefault();
+        void toggleMic();
+        return;
+      }
+      if (hk.ptt === code && getSettings().voiceMode === "ptt") {
+        e.preventDefault();
+        pttPress();
+      }
+    };
+    const onMouseUp = (e: MouseEvent) => {
+      const code = mouseHotkeyCode(e.button);
+      if (!code) return;
+      if (getSettings().hotkeys.ptt === code) pttRelease();
+    };
     const releasePtt = () => pttRelease();
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("mouseup", onMouseUp);
     window.addEventListener("blur", releasePtt);
     document.addEventListener("visibilitychange", releasePtt);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mouseup", onMouseUp);
       window.removeEventListener("blur", releasePtt);
       document.removeEventListener("visibilitychange", releasePtt);
     };

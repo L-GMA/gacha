@@ -52,7 +52,20 @@ export function hotkeyLabel(code: string): string {
   if (f) return `F${f[1]}`;
   const num = code.match(/^Numpad(\d)$/);
   if (num) return `Num${num[1]}`;
+  const mouse = code.match(/^Mouse(\d+)$/);
+  if (mouse) {
+    const n = Number(mouse[1]);
+    if (n === 1) return "Средняя кнопка мыши";
+    if (n === 3) return "Боковая кнопка (назад)";
+    if (n === 4) return "Боковая кнопка (вперёд)";
+    return `Кнопка мыши ${n}`;
+  }
   return code;
+}
+
+export function mouseHotkeyCode(button: number): string | null {
+  if (button < 1 || button === 2) return null;
+  return `Mouse${button}`;
 }
 
 export function isModifierKey(code: string): boolean {
