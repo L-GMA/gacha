@@ -308,9 +308,9 @@ export function Server({
                   members={data.members}
                   meId={data.me.id}
                 />
-              ) : (
+              ) : !voiceChannelId ? (
                 <p className="center-hint">Выберите канал слева</p>
-              )
+              ) : null
             ) : activeConv ? (
               <Chat
                 key={activeConv.id}
@@ -426,7 +426,7 @@ export function Server({
         </span>
         <span className="user-panel-actions" onClick={(e) => e.stopPropagation()}>
           <button
-            className={`user-panel-btn ${voiceStatus?.muted ? "active" : ""}`}
+            className={`user-panel-btn ${voiceStatus?.muted || voiceStatus?.deafened ? "active" : ""}`}
             title={voiceStatus?.muted ? "Включить микрофон" : "Выключить микрофон"}
             onClick={() => voiceControlsRef.current?.toggleMic()}
           >

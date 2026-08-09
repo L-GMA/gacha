@@ -1401,8 +1401,8 @@ input:focus {
   height: 40px;
   border: none;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(245, 245, 247, 0.85);
+  background: #4e5058;
+  color: rgba(245, 245, 247, 0.9);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1413,7 +1413,7 @@ input:focus {
 }
 
 .voice-ctl:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.15);
+  background: #5f626c;
 }
 
 .voice-ctl:active:not(:disabled) {
@@ -1423,6 +1423,10 @@ input:focus {
 .voice-ctl:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+.voice-ctl:disabled.active {
+  opacity: 1;
 }
 
 .voice-ctl.active {
@@ -3565,23 +3569,6 @@ input:focus {
   50% {
     box-shadow: 0 0 0 6px rgba(0, 255, 153, 0);
   }
-}
-
-.voice-ptt-hint {
-  margin: 0 0 10px;
-  font-size: 12.5px;
-  color: rgba(255, 255, 255, 0.5);
-  text-align: center;
-}
-
-.voice-ptt-hint kbd {
-  font-family: inherit;
-  font-size: 11.5px;
-  padding: 1px 6px;
-  border-radius: 5px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.07);
-  color: rgba(255, 255, 255, 0.85);
 }
 
 .us-mic-meter {

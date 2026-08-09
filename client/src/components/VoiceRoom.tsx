@@ -15,7 +15,7 @@ import { DeafenOffMiniIcon, MicOffMiniIcon } from "./stateIcons.js";
 import { getSettings, subscribeSettings } from "../settings.js";
 import { applyKrisp } from "../krisp.js";
 import { getVoiceMicGraph, switchMicGraphDevice } from "../micPipeline.js";
-import { hotkeyLabel, isTypingTarget, mouseHotkeyCode } from "../hotkeys.js";
+import { isTypingTarget, mouseHotkeyCode } from "../hotkeys.js";
 
 type RemoteAudioTrackLike = {
   setVolume(volume: number): void;
@@ -244,7 +244,6 @@ export function VoiceRoom({
   const [error, setError] = useState("");
   const [ping, setPing] = useState<number | null>(null);
   const [voiceMode, setVoiceMode] = useState(getSettings().voiceMode);
-  const [globalPttActive, setGlobalPttActive] = useState(false);
   const [volumes, setVolumes] = useState<Record<string, number>>({});
   const [screenVolumes, setScreenVolumes] = useState<Record<string, number>>({});
   const [sharingScreen, setSharingScreen] = useState(false);
@@ -1102,16 +1101,13 @@ export function VoiceRoom({
       const code = enabled ? s.hotkeys.ptt : "";
       if (code === last.code && enabled === last.enabled) return;
       last = { code, enabled };
-      setGlobalPtt({ code, enabled })
-        .then((res) => setGlobalPttActive(enabled && res.mapped))
-        .catch(() => setGlobalPttActive(false));
+      setGlobalPtt({ code, enabled }).catch(() => {});
     };
     sync();
     const unsub = subscribeSettings(sync);
     return () => {
       offPtt();
       unsub();
-      setGlobalPttActive(false);
       setGlobalPtt({ code: "", enabled: false }).catch(() => {});
     };
   }, []);
@@ -1612,26 +1608,10 @@ export function VoiceRoom({
       )}
       {error && <p className="error">{error}</p>}
 
-      {voiceMode === "ptt" && (
-        <p className="modal-note voice-ptt-hint">
-          Режим рации: зажмите кнопку микрофона
-          {getSettings().hotkeys.ptt ? (
-            <>
-              {" "}
-              или <kbd>{hotkeyLabel(getSettings().hotkeys.ptt)}</kbd>
-            </>
-          ) : null}
-          , чтобы говорить
-          {globalPttActive
-            ? " — клавиша работает из любого окна и из трея"
-            : ""}
-        </p>
-      )}
-
       <div className="voice-controls-wrap">
         <div className="voice-controls">
           <button
-            className={`voice-ctl ${micActive ? "active" : ""}`}
+            className={`voice-ctl ${muted || deafened ? "active" : ""}`}
             onPointerDown={voiceMode === "ptt" ? pttPress : undefined}
             onPointerUp={voiceMode === "ptt" ? pttRelease : undefined}
             onPointerLeave={voiceMode === "ptt" ? pttRelease : undefined}
