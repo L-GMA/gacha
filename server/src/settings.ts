@@ -89,11 +89,17 @@ export async function getActiveS3(): Promise<S3Settings | null> {
   return null;
 }
 
+export function normalizeS3Endpoint(endpoint: string): string {
+  const trimmed = endpoint.trim().replace(/\/+$/, "");
+  if (!trimmed) return "";
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
 export async function testS3Connection(s3: S3Settings): Promise<void> {
   const { S3Client, PutObjectCommand, DeleteObjectCommand } = await import("@aws-sdk/client-s3");
   const client = new S3Client({
     region: s3.region,
-    endpoint: s3.endpoint || undefined,
+    endpoint: normalizeS3Endpoint(s3.endpoint) || undefined,
     credentials: {
       accessKeyId: s3.accessKeyId,
       secretAccessKey: s3.secretAccessKey,

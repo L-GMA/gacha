@@ -203,6 +203,28 @@ export async function conversationsRoutes(app: FastifyInstance) {
     };
   });
 
+  app.delete("/api/conversations/:id/messages/:messageId", auth, async (request, reply) => {
+    const user = request.user as { sub: string };
+    const { id, messageId } = request.params as { id: string; messageId: string };
+    const isMember = await query(
+      "SELECT 1 FROM conversation_members WHERE conversation_id = $1 AND user_id = $2",
+      [id, user.sub],
+    );
+    if (isMember.rows.length === 0) {
+      return reply.status(403).send({ error: "Нет доступа к диалогу" });
+    }
+    const deleted = await query(
+      `DELETE FROM messages
+       WHERE id = $1 AND conversation_id = $2 AND sender_id = $3
+       RETURNING id`,
+      [messageId, id, user.sub],
+    );
+    if (deleted.rows.length === 0) {
+      return reply.status(404).send({ error: "Сообщение не найдено" });
+    }
+    return { ok: true };
+  });
+
   app.post("/api/dms", auth, async (request, reply) => {
     const user = request.user as { sub: string };
     const body = (request.body ?? {}) as Record<string, unknown>;

@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getActiveS3, type S3Settings } from "./settings.js";
+import { getActiveS3, normalizeS3Endpoint, type S3Settings } from "./settings.js";
 
 export interface StorageAdapter {
   put(key: string, data: Buffer, contentType: string): Promise<string>;
@@ -25,7 +25,7 @@ class S3Storage implements StorageAdapter {
     const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
     const client = new S3Client({
       region: this.settings.region,
-      endpoint: this.settings.endpoint || undefined,
+      endpoint: normalizeS3Endpoint(this.settings.endpoint) || undefined,
       credentials: {
         accessKeyId: this.settings.accessKeyId,
         secretAccessKey: this.settings.secretAccessKey,

@@ -1866,6 +1866,39 @@ input:focus {
   color: rgba(245, 245, 247, 0.35);
 }
 
+.message-delete {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: rgba(245, 245, 247, 0.35);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s var(--ease-fast), color 0.2s var(--ease-fast),
+    background 0.2s var(--ease-fast);
+}
+
+.message:hover .message-delete,
+.message-delete:focus-visible {
+  opacity: 1;
+}
+
+.message-delete:hover {
+  color: #ff8a8a;
+  background: rgba(255, 92, 92, 0.12);
+}
+
+.message-delete:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
 .message-text {
   font-size: 14px;
   color: rgba(245, 245, 247, 0.92);

@@ -216,6 +216,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ content, imageUrl }),
     }),
+  deleteMessage: (conversationId: string, messageId: string) =>
+    request<{ ok: boolean }>(`/conversations/${conversationId}/messages/${messageId}`, {
+      method: "DELETE",
+    }),
   startDm: (userId: string) =>
     request<{ conversation: Conversation | null }>("/dms", {
       method: "POST",
@@ -229,6 +233,10 @@ export const api = {
     request<{ message: ChatMessage }>(`/channels/${id}/messages`, {
       method: "POST",
       body: JSON.stringify({ content, imageUrl }),
+    }),
+  deleteChannelMessage: (channelId: string, messageId: string) =>
+    request<{ ok: boolean }>(`/channels/${channelId}/messages/${messageId}`, {
+      method: "DELETE",
     }),
   uploadImage: (file: File) => {
     const form = new FormData();

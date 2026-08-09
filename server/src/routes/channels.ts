@@ -113,4 +113,19 @@ export async function channelsRoutes(app: FastifyInstance) {
       },
     };
   });
+
+  app.delete("/api/channels/:id/messages/:messageId", { preHandler: auth }, async (request, reply) => {
+    const user = request.user as { sub: string };
+    const { id, messageId } = request.params as { id: string; messageId: string };
+    const deleted = await query(
+      `DELETE FROM channel_messages
+       WHERE id = $1 AND channel_id = $2 AND sender_id = $3
+       RETURNING id`,
+      [messageId, id, user.sub],
+    );
+    if (deleted.rows.length === 0) {
+      return reply.status(404).send({ error: "Сообщение не найдено" });
+    }
+    return { ok: true };
+  });
 }
