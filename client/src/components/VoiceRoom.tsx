@@ -1122,9 +1122,13 @@ export function VoiceRoom({
     const mode = getSettings().voiceMode;
     let wantOn: boolean;
     if (mode === "ptt") {
-      // Слой рации независим от слоя мута/оглушения: передача управляется
-      // только зажатием и хвостом, мут/оглушение не блокируют её.
-      wantOn = pttHeldRef.current || pttTailRef.current;
+      // Мут/оглушение — приоритетный слой: при включённом муте или оглушении
+      // зажатие рации не включает микрофон. Рация не меняет состояние мута —
+      // передачей управляют только зажатие/хвост и слой мута/оглушения.
+      wantOn =
+        (pttHeldRef.current || pttTailRef.current) &&
+        !mutedRef.current &&
+        !deafenedRef.current;
     } else {
       wantOn = !mutedRef.current && !deafenedRef.current;
     }
@@ -1633,12 +1637,16 @@ export function VoiceRoom({
             onPointerLeave={voiceMode === "ptt" ? pttRelease : undefined}
             onPointerCancel={voiceMode === "ptt" ? pttRelease : undefined}
             onClick={voiceMode === "ptt" ? undefined : toggleMic}
-            disabled={deafened && voiceMode !== "ptt"}
+            disabled={voiceMode === "ptt" ? muted || deafened : deafened}
             title={
               voiceMode === "ptt"
-                ? micActive
-                  ? "Микрофон включён — отпустите, чтобы выключить"
-                  : "Зажать и говорить"
+                ? muted
+                  ? "Мут включён — рация не работает"
+                  : deafened
+                    ? "Оглушён — рация не работает"
+                    : micActive
+                      ? "Микрофон включён — отпустите, чтобы выключить"
+                      : "Зажать и говорить"
                 : muted
                   ? "Включить микрофон"
                   : "Выключить микрофон"
