@@ -168,7 +168,9 @@ const API = IS_WEB ? "/api" : "https://gachandra.ru/api";
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {};
-  if (options.body !== undefined) headers["Content-Type"] = "application/json";
+  if (options.body !== undefined && !(options.body instanceof FormData)) {
+    headers["Content-Type"] = "application/json";
+  }
   const token = localStorage.getItem("token");
   if (token) headers["Authorization"] = `Bearer ${token}`;
   if (options.headers) Object.assign(headers, options.headers);
