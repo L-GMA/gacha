@@ -1,6 +1,7 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 
 const clients = new Set<NodeJS.WritableStream>();
+const presenceClients = new Set<NodeJS.WritableStream>();
 
 export function broadcastServerChanged() {
   if (clients.size === 0) return;
@@ -14,19 +15,33 @@ export function broadcastServerChanged() {
   }
 }
 
-const sseHeartbeat = setInterval(() => {
-  if (clients.size === 0) return;
-  for (const res of clients) {
+export function broadcastPresenceChanged() {
+  if (presenceClients.size === 0) return;
+  const payload = "data: changed\n\n";
+  for (const res of presenceClients) {
     try {
-      res.write(": ping\n\n");
+      res.write(payload);
     } catch {
-      /* ignore */
+      /* клиент мог закрыться */
+    }
+  }
+}
+
+const sseHeartbeat = setInterval(() => {
+  for (const set of [clients, presenceClients]) {
+    if (set.size === 0) continue;
+    for (const res of set) {
+      try {
+        res.write(": ping\n\n");
+      } catch {
+        /* ignore */
+      }
     }
   }
 }, 25000);
 sseHeartbeat.unref();
 
-export async function serverEventsRoute(request: FastifyRequest, reply: FastifyReply) {
+function attachSse(req: FastifyRequest, reply: FastifyReply, set: Set<NodeJS.WritableStream>) {
   reply.hijack();
   const res = reply.raw;
   res.writeHead(200, {
@@ -36,8 +51,16 @@ export async function serverEventsRoute(request: FastifyRequest, reply: FastifyR
     "X-Accel-Buffering": "no",
   });
   res.write("retry: 3000\n\n");
-  clients.add(res);
-  request.raw.on("close", () => {
-    clients.delete(res);
+  set.add(res);
+  req.raw.on("close", () => {
+    set.delete(res);
   });
+}
+
+export async function serverEventsRoute(request: FastifyRequest, reply: FastifyReply) {
+  attachSse(request, reply, clients);
+}
+
+export async function presenceEventsRoute(request: FastifyRequest, reply: FastifyReply) {
+  attachSse(request, reply, presenceClients);
 }

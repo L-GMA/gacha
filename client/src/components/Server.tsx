@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, subscribePassVoiceEvents, subscribeServerEvents, type ServerData, type Member, type Conversation, type Channel, type PassVoiceChannel, type VoicePresenceUser } from "../api.js";
+import { api, subscribePassVoiceEvents, subscribeServerEvents, subscribeVoiceEvents, type ServerData, type Member, type Conversation, type Channel, type PassVoiceChannel, type VoicePresenceUser } from "../api.js";
 import { ChannelsPanel } from "./ChannelsPanel.js";
 import { MembersPanel } from "./MembersPanel.js";
 import { DmRail } from "./DmRail.js";
@@ -50,6 +50,25 @@ export function Server({
   const prevConnectedRef = useRef(false);
   const [mode, setMode] = useState<"home" | "friends">("home");
   const [error, setError] = useState("");
+  const [membersOpen, setMembersOpen] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("gacha.membersPanel.open") !== "0";
+    } catch {
+      return true;
+    }
+  });
+
+  const toggleMembers = () => {
+    setMembersOpen((o) => {
+      const next = !o;
+      try {
+        localStorage.setItem("gacha.membersPanel.open", next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
 
   const loadPresence = async () => {
     try {
@@ -85,14 +104,16 @@ export function Server({
   useEffect(() => {
     load();
     const t = setInterval(load, 30000);
-    const p = setInterval(() => void loadPresence(), 10000);
+    const p = setInterval(() => void loadPresence(), 5000);
     const unsub = subscribePassVoiceEvents(() => void loadPassVoice());
     const unsubServer = subscribeServerEvents(() => void load());
+    const unsubVoice = subscribeVoiceEvents(() => void loadPresence());
     return () => {
       clearInterval(t);
       clearInterval(p);
       unsub();
       unsubServer();
+      unsubVoice();
     };
   }, []);
 
@@ -378,7 +399,18 @@ export function Server({
         </div>
 
         {mode === "home" && (
-          <MembersPanel members={data.members} onSelect={(m) => setProfileId(m.id)} />
+          <div className={`members-wrap ${membersOpen ? "" : "collapsed"}`}>
+            <button
+              className="members-toggle"
+              title={membersOpen ? "Скрыть список участников" : "Показать список участников"}
+              onClick={toggleMembers}
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m9 6 6 6-6 6" />
+              </svg>
+            </button>
+            <MembersPanel members={data.members} onSelect={(m) => setProfileId(m.id)} />
+          </div>
         )}
       </div>
 

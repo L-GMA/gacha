@@ -2,6 +2,8 @@ import type { FastifyInstance } from "fastify";
 import bcrypt from "bcryptjs";
 import { query } from "../db.js";
 import { isOwnImageUrl, LIMITS } from "../validate.js";
+import { refreshUserVoiceAttributes } from "./voice.js";
+import { broadcastPresenceChanged } from "../realtime.js";
 
 const AUTH_RATE = { config: { rateLimit: { max: 15, timeWindow: "60 seconds" } } };
 
@@ -189,6 +191,10 @@ export async function authRoutes(app: FastifyInstance) {
     }
     params.push(user.sub);
     await query(`UPDATE users SET ${set.join(", ")} WHERE id = $${params.length}`, params);
+    // Свежие аватар/ник/звуки сразу попадают в активные войс-сессии
+    // и в списки присутствия у всех клиентов.
+    void refreshUserVoiceAttributes(user.sub);
+    void broadcastPresenceChanged();
     return { ok: true };
   });
 }

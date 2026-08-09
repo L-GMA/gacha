@@ -18,7 +18,7 @@ import { channelsRoutes } from "./routes/channels.js";
 import { uploadsRoutes } from "./routes/uploads.js";
 import { passVoiceRoutes } from "./routes/passVoice.js";
 import { voiceRoutes } from "./routes/voice.js";
-import { serverEventsRoute, broadcastServerChanged } from "./realtime.js";
+import { serverEventsRoute, presenceEventsRoute, broadcastServerChanged } from "./realtime.js";
 
 declare module "@fastify/jwt" {
   interface FastifyJWT {
@@ -87,6 +87,7 @@ await app.register(passVoiceRoutes);
 await app.register(voiceRoutes);
 
 app.get("/api/server/events", { preHandler: app.authenticate }, serverEventsRoute);
+app.get("/api/voice/events", { preHandler: app.authenticate }, presenceEventsRoute);
 
 app.addHook("onResponse", async (request, reply) => {
   if (reply.statusCode < 200 || reply.statusCode >= 300) return;

@@ -115,21 +115,6 @@ function DeafenOffIcon() {
   );
 }
 
-function PttIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="7" y="2" width="10" height="14" rx="3" />
-      <path d="M12 7.5a1.5 1.5 0 0 1 1.5 1.5v1a1.5 1.5 0 0 1-3 0V9a1.5 1.5 0 0 1 1.5-1.5Z" />
-      <path d="M5 9.5v3" />
-      <path d="M3 11v0" />
-      <path d="M19 9.5v3" />
-      <path d="M21 11v0" />
-      <path d="M10 19.5h4" />
-      <path d="M12 16.5v3" />
-    </svg>
-  );
-}
-
 function ScreenShareIcon() {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -258,6 +243,7 @@ export function VoiceRoom({
   const [screens, setScreens] = useState<
     { identity: string; track: Track; isMe: boolean }[]
   >([]);
+  const [viewingScreenId, setViewingScreenId] = useState<string | null>(null);
   const roomRef = useRef<Room | null>(null);
   const meIdentityRef = useRef<string | null>(null);
   const deafenedRef = useRef(false);
@@ -1466,6 +1452,31 @@ export function VoiceRoom({
   const screenByIdentity = new Map<string, Track>();
   for (const s of screens) screenByIdentity.set(s.identity, s.track);
   const meScreen = meIdentity ? screenByIdentity.get(meIdentity) : undefined;
+  const viewingTrack = viewingScreenId
+    ? screenByIdentity.get(viewingScreenId)
+    : undefined;
+  const viewingName =
+    (viewingScreenId
+      ? participants.find((p) => p.identity === viewingScreenId)
+      : undefined)?.attributes?.nickname ?? "";
+
+  useEffect(() => {
+    if (viewingScreenId && !screenByIdentity.has(viewingScreenId)) {
+      setViewingScreenId(null);
+    }
+  }, [screens, viewingScreenId]);
+
+  const joinScreen = async (p: RemoteParticipant) => {
+    try {
+      const pub = p.getTrackPublication(Track.Source.ScreenShare);
+      if (pub && !pub.isSubscribed) {
+        await pub.setSubscribed(true);
+      }
+    } catch {
+      /* подписка, скорее всего, уже активна */
+    }
+    setViewingScreenId(p.identity);
+  };
 
   return (
     <div className="pv-room voice-room">
@@ -1479,67 +1490,140 @@ export function VoiceRoom({
       )}
 
       <div className="pv-members">
-        <div className={`pv-member ${meSpeaking ? "speaking" : ""}`}>
-          <div className="pv-member-row">
-            <Avatar src={absAssetUrl(meAvatar)} name={meName} size={40} online />
-            <span className="pv-member-name">{meName}</span>
-            <span className="pv-member-owner">вы</span>
+        {viewingScreenId && viewingTrack && (
+          <div className="pv-screen-viewer">
+            <div className="pv-screen-viewer-head">
+              <span className="pv-screen-viewer-title">Трансляция · {viewingName}</span>
+              <div className="pv-screen-viewer-actions">
+                <div className="pv-volume pv-viewer-volume">
+                  <input
+                    type="range"
+                    min={0}
+                    max={200}
+                    step={5}
+                    value={Math.round((screenVolumes[viewingScreenId] ?? 1) * 100)}
+                    onChange={(e) =>
+                      setScreenVolume(
+                        viewingScreenId,
+                        viewingName,
+                        Number(e.target.value) / 100,
+                      )
+                    }
+                    title={`Громкость трансляции ${viewingName}`}
+                  />
+                  <span className="pv-volume-val">
+                    {Math.round((screenVolumes[viewingScreenId] ?? 1) * 100)}%
+                  </span>
+                </div>
+                <button
+                  className="btn small danger"
+                  onClick={() => setViewingScreenId(null)}
+                  title="Прекратить просмотр трансляции"
+                >
+                  Прекратить просмотр
+                </button>
+              </div>
+            </div>
+            <div className="pv-screen-viewer-video">
+              <ScreenShareView track={viewingTrack} muted={deafened} />
+            </div>
+          </div>
+        )}
+
+        <div className={`pv-card ${meSpeaking ? "speaking" : ""}`}>
+          <div className="pv-card-badges">
             {voiceMode === "ptt" && (
-              <span className="pv-member-ico" title="Режим рации (нажми и говори)">
-                <PttIcon />
+              <span className="pv-badge" title="Режим рации (нажми и говори)">
+                Рация
               </span>
             )}
             {!micActive && (
-              <span className="pv-member-ico" title="Микрофон выключен">
+              <span className="pv-badge danger" title="Микрофон выключен">
                 <MicOffMiniIcon />
               </span>
             )}
             {deafened && (
-              <span className="pv-member-ico" title="Оглушён">
+              <span className="pv-badge danger" title="Оглушён">
                 <DeafenOffMiniIcon />
               </span>
             )}
           </div>
-          {meScreen && (
-            <div className="pv-member-screen">
-              <ScreenShareView track={meScreen} muted={true} />
-              <span className="pv-member-screen-label">
-                Ваш экран · {shareSourceFps > 0 ? `${shareSourceFps} FPS` : "…"}
-              </span>
-            </div>
-          )}
+          <div className="pv-card-main">
+            {meScreen ? (
+              <div className="pv-card-screen">
+                <ScreenShareView track={meScreen} muted={true} />
+                <span className="pv-card-screen-label">
+                  Ваш экран · {shareSourceFps > 0 ? `${shareSourceFps} FPS` : "…"}
+                </span>
+              </div>
+            ) : (
+              <Avatar src={absAssetUrl(meAvatar)} name={meName} size={64} online />
+            )}
+          </div>
+          <div className="pv-card-foot">
+            <span className="pv-card-name">
+              {meName}
+              <span className="pv-card-owner">вы</span>
+            </span>
+          </div>
         </div>
+
         {participants.length === 0 && (
-          <p className="modal-note">Пока никто не подключился</p>
+          <p className="modal-note pv-empty">Пока никто не подключился</p>
         )}
+
         {participants.map((p) => {
           const name = p.attributes?.nickname ?? p.name ?? p.identity;
           const vol = volumes[p.identity] ?? 1;
           const screenTrack = screenByIdentity.get(p.identity);
+          const viewing = viewingScreenId === p.identity;
+          const isMuted = !p.isMicrophoneEnabled || p.attributes?.gacha_muted === "1";
+          const isDeafened = p.attributes?.gacha_deafened === "1";
+          const isPtt = p.attributes?.gacha_ptt === "1";
           return (
             <div
               key={p.identity}
-              className={`pv-member ${speakingIds.includes(p.identity) ? "speaking" : ""}`}
+              className={`pv-card ${speakingIds.includes(p.identity) ? "speaking" : ""}`}
             >
-              <div className="pv-member-row">
-                <Avatar src={absAssetUrl(p.attributes?.avatar ?? null)} name={name} size={40} online />
-                <span className="pv-member-name">{name}</span>
-                {(!p.isMicrophoneEnabled || p.attributes?.gacha_muted === "1") && (
-                  <span className="pv-member-ico" title="Микрофон выключен">
+              <div className="pv-card-badges">
+                {isMuted && (
+                  <span className="pv-badge danger" title="Микрофон выключен">
                     <MicOffMiniIcon />
                   </span>
                 )}
-                {p.attributes?.gacha_deafened === "1" && (
-                  <span className="pv-member-ico" title="Оглушён">
+                {isDeafened && (
+                  <span className="pv-badge danger" title="Оглушён">
                     <DeafenOffMiniIcon />
                   </span>
                 )}
-                {p.attributes?.gacha_ptt === "1" && (
-                  <span className="pv-member-ico" title="Режим рации (нажми и говори)">
-                    <PttIcon />
+                {isPtt && (
+                  <span className="pv-badge" title="Режим рации (нажми и говори)">
+                    Рация
                   </span>
                 )}
-                <div className="pv-volume">
+              </div>
+              <div className="pv-card-main">
+                {screenTrack && !viewing ? (
+                  <button
+                    className="pv-card-join"
+                    onClick={() => joinScreen(p)}
+                    title={`${name} запустил трансляцию — нажмите, чтобы смотреть`}
+                  >
+                    <ScreenShareIcon />
+                    <span>Смотреть трансляцию</span>
+                  </button>
+                ) : (
+                  <Avatar
+                    src={absAssetUrl(p.attributes?.avatar ?? null)}
+                    name={name}
+                    size={64}
+                    online
+                  />
+                )}
+              </div>
+              <div className="pv-card-foot">
+                <span className="pv-card-name">{name}</span>
+                <div className="pv-card-volume">
                   <input
                     type="range"
                     min={0}
@@ -1558,34 +1642,6 @@ export function VoiceRoom({
                   <span className="pv-volume-val">{Math.round(vol * 100)}%</span>
                 </div>
               </div>
-              {screenTrack && (
-                <div className="pv-member-screen">
-                  <ScreenShareView track={screenTrack} muted={deafened} />
-                  <span className="pv-member-screen-label">{name}</span>
-                  <div
-                    className="pv-volume pv-screen-volume"
-                    title={`Громкость трансляции ${name}`}
-                  >
-                    <input
-                      type="range"
-                      min={0}
-                      max={200}
-                      step={5}
-                      value={Math.round((screenVolumes[p.identity] ?? 1) * 100)}
-                      onChange={(e) =>
-                        setScreenVolume(
-                          p.identity,
-                          name,
-                          Number(e.target.value) / 100,
-                        )
-                      }
-                    />
-                    <span className="pv-volume-val">
-                      {Math.round((screenVolumes[p.identity] ?? 1) * 100)}%
-                    </span>
-                  </div>
-                </div>
-              )}
             </div>
           );
         })}

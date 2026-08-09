@@ -449,3 +449,6 @@ export const subscribePassVoiceEvents = (onChange: () => void) =>
 
 export const subscribeServerEvents = (onChange: () => void) =>
   subscribeEvents("/server/events", onChange);
+
+export const subscribeVoiceEvents = (onChange: () => void) =>
+  subscribeEvents("/voice/events", onChange);
