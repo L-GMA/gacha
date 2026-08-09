@@ -17,6 +17,7 @@ interface Window {
       code: string;
       enabled: boolean;
     }) => Promise<{ mapped: boolean }>;
+    getSound?: (url: string) => Promise<string>;
     onGlobalPtt?: (callback: (down: boolean) => void) => () => void;
   };
   gachaScreen?: {

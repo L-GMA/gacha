@@ -10,6 +10,7 @@ import { highestRoleColor } from "../roleColor.js";
 import { Avatar } from "./Avatar.js";
 import { Toggle } from "./Toggle.js";
 import { getSettings, setSetting, subscribeSettings } from "../settings.js";
+import { playCustomSound } from "../sounds.js";
 import { hotkeyLabel, isModifierKey, mouseHotkeyCode } from "../hotkeys.js";
 import {
   openMicGraph,
@@ -886,7 +887,7 @@ function SoundUploadRow({
   const play = () => {
     if (!url) return;
     try {
-      void new Audio(url).play().catch(() => {});
+      void playCustomSound(url);
     } catch {
       /* ignore */
     }

@@ -30,6 +30,7 @@ type PlaybackCtx = {
 
 const SPEAKING_THRESHOLD = 0.02;
 const SPEAKING_HANG_MS = 350;
+const PTT_TAIL_MS = 2000;
 
 const isDesktopApp =
   typeof window !== "undefined" &&
@@ -104,6 +105,21 @@ function DeafenOffIcon() {
       <path d="M3 14a2 2 0 0 1 2-2h1v6H5a2 2 0 0 1-2-2v-2Z" />
       <path d="M21 14a2 2 0 0 0-2-2h-1v6h1a2 2 0 0 0 2-2v-2Z" />
       <line x1="2" y1="2" x2="22" y2="22" />
+    </svg>
+  );
+}
+
+function PttIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="7" y="2" width="10" height="14" rx="3" />
+      <path d="M12 7.5a1.5 1.5 0 0 1 1.5 1.5v1a1.5 1.5 0 0 1-3 0V9a1.5 1.5 0 0 1 1.5-1.5Z" />
+      <path d="M5 9.5v3" />
+      <path d="M3 11v0" />
+      <path d="M19 9.5v3" />
+      <path d="M21 11v0" />
+      <path d="M10 19.5h4" />
+      <path d="M12 16.5v3" />
     </svg>
   );
 }
@@ -241,6 +257,8 @@ export function VoiceRoom({
   const deafenedRef = useRef(false);
   const mutedRef = useRef(false);
   const pttHeldRef = useRef(false);
+  const pttTailRef = useRef(false);
+  const pttTailTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const micLatchRef = useRef(false);
   const micUnavailableRef = useRef(false);
   const micPendingRef = useRef(false);
@@ -881,6 +899,11 @@ export function VoiceRoom({
       alive = false;
       window.removeEventListener("pointerdown", resumeMix);
       window.removeEventListener("keydown", resumeMix);
+      if (pttTailTimerRef.current) {
+        clearTimeout(pttTailTimerRef.current);
+        pttTailTimerRef.current = null;
+      }
+      pttTailRef.current = false;
       if (joinedRef.current)
         playLeaveSound(
           meLeaveSound ?? roomRef.current?.localParticipant.attributes?.leaveSound,
@@ -947,8 +970,9 @@ export function VoiceRoom({
     void room.localParticipant.setAttributes({
       gacha_muted: muted ? "1" : "0",
       gacha_deafened: deafened ? "1" : "0",
+      gacha_ptt: voiceMode === "ptt" ? "1" : "0",
     });
-  }, [muted, deafened]);
+  }, [muted, deafened, voiceMode, connected]);
 
   useEffect(() => {
     if (!onParticipants) return;
@@ -979,6 +1003,13 @@ export function VoiceRoom({
         setVoiceMode(mode);
         if (mode !== "ptt" && pttHeldRef.current) {
           pttHeldRef.current = false;
+        }
+        if (mode !== "ptt" && pttTailRef.current) {
+          pttTailRef.current = false;
+          if (pttTailTimerRef.current) {
+            clearTimeout(pttTailTimerRef.current);
+            pttTailTimerRef.current = null;
+          }
         }
         void recomputeMic();
       }),
@@ -1088,7 +1119,7 @@ export function VoiceRoom({
     if (deafenedRef.current) {
       wantOn = false;
     } else if (mode === "ptt") {
-      wantOn = pttHeldRef.current || micLatchRef.current;
+      wantOn = pttHeldRef.current || micLatchRef.current || pttTailRef.current;
     } else {
       wantOn = !mutedRef.current;
     }
@@ -1113,6 +1144,11 @@ export function VoiceRoom({
 
   const pttPress = () => {
     if (getSettings().voiceMode !== "ptt") return;
+    if (pttTailTimerRef.current) {
+      clearTimeout(pttTailTimerRef.current);
+      pttTailTimerRef.current = null;
+      pttTailRef.current = false;
+    }
     pttHeldRef.current = true;
     void recomputeMic();
   };
@@ -1120,6 +1156,17 @@ export function VoiceRoom({
   const pttRelease = () => {
     if (!pttHeldRef.current) return;
     pttHeldRef.current = false;
+    if (micLatchRef.current) {
+      void recomputeMic();
+      return;
+    }
+    pttTailRef.current = true;
+    if (pttTailTimerRef.current) clearTimeout(pttTailTimerRef.current);
+    pttTailTimerRef.current = setTimeout(() => {
+      pttTailTimerRef.current = null;
+      pttTailRef.current = false;
+      void recomputeMic();
+    }, PTT_TAIL_MS);
     void recomputeMic();
   };
 
@@ -1434,6 +1481,11 @@ export function VoiceRoom({
             <Avatar src={meAvatar} name={meName} size={40} online />
             <span className="pv-member-name">{meName}</span>
             <span className="pv-member-owner">вы</span>
+            {voiceMode === "ptt" && (
+              <span className="pv-member-ico" title="Режим рации (нажми и говори)">
+                <PttIcon />
+              </span>
+            )}
             {muted && (
               <span className="pv-member-ico" title="Микрофон выключен">
                 <MicOffMiniIcon />
@@ -1458,7 +1510,7 @@ export function VoiceRoom({
           <p className="modal-note">Пока никто не подключился</p>
         )}
         {participants.map((p) => {
-          const name = p.name ?? p.identity;
+          const name = p.attributes?.nickname ?? p.name ?? p.identity;
           const vol = volumes[p.identity] ?? 1;
           const screenTrack = screenByIdentity.get(p.identity);
           return (
@@ -1467,7 +1519,7 @@ export function VoiceRoom({
               className={`pv-member ${speakingIds.includes(p.identity) ? "speaking" : ""}`}
             >
               <div className="pv-member-row">
-                <Avatar src={null} name={name} size={40} online />
+                <Avatar src={p.attributes?.avatar ?? null} name={name} size={40} online />
                 <span className="pv-member-name">{name}</span>
                 {(!p.isMicrophoneEnabled || p.attributes?.gacha_muted === "1") && (
                   <span className="pv-member-ico" title="Микрофон выключен">
@@ -1477,6 +1529,11 @@ export function VoiceRoom({
                 {p.attributes?.gacha_deafened === "1" && (
                   <span className="pv-member-ico" title="Оглушён">
                     <DeafenOffMiniIcon />
+                  </span>
+                )}
+                {p.attributes?.gacha_ptt === "1" && (
+                  <span className="pv-member-ico" title="Режим рации (нажми и говори)">
+                    <PttIcon />
                   </span>
                 )}
                 <div className="pv-volume">

@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld("desktop", {
   },
   skipUpdate: () => ipcRenderer.send("update:skip"),
   setGlobalPtt: (payload) => ipcRenderer.invoke("ptt:set", payload),
+  getSound: (url) => ipcRenderer.invoke("sound:get", url),
   onGlobalPtt: (callback) => {
     const listener = (_event, down) => callback(Boolean(down));
     ipcRenderer.on("voice:global-ptt", listener);

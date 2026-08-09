@@ -8,8 +8,12 @@ const {
   Tray,
   Menu,
   nativeImage,
+  net,
 } = require("electron");
 const path = require("path");
+const crypto = require("crypto");
+const { mkdir, readdir, writeFile, unlink, stat } = require("fs/promises");
+const { pathToFileURL } = require("url");
 const { autoUpdater } = require("electron-updater");
 const { uIOhook, UiohookKey } = require("uiohook-napi");
 
@@ -270,6 +274,95 @@ function setGlobalPtt(code, enabled) {
   return { mapped: Boolean(mapped) };
 }
 
+const SOUND_CACHE_MAX_FILES = 300;
+
+function extFromContentType(contentType) {
+  const ct = String(contentType || "").split(";")[0].trim().toLowerCase();
+  const map = {
+    "audio/mpeg": ".mp3",
+    "audio/mp3": ".mp3",
+    "audio/wav": ".wav",
+    "audio/x-wav": ".wav",
+    "audio/ogg": ".ogg",
+    "audio/opus": ".ogg",
+    "audio/webm": ".webm",
+    "audio/mp4": ".m4a",
+    "audio/aac": ".m4a",
+    "audio/x-m4a": ".m4a",
+  };
+  return map[ct] ?? null;
+}
+
+function extFromUrl(url) {
+  try {
+    const pathname = new URL(url).pathname;
+    const m = /\.(mp3|wav|ogg|webm|m4a)$/i.exec(pathname);
+    return m ? `.${m[1].toLowerCase()}` : null;
+  } catch {
+    return null;
+  }
+}
+
+async function pruneSoundCache(dir, keep) {
+  try {
+    const entries = await readdir(dir);
+    if (entries.length <= keep) return;
+    const files = await Promise.all(
+      entries.map(async (name) => {
+        const full = path.join(dir, name);
+        try {
+          const s = await stat(full);
+          return { name, full, mtime: s.mtimeMs };
+        } catch {
+          return null;
+        }
+      }),
+    );
+    files
+      .filter(Boolean)
+      .sort((a, b) => a.mtime - b.mtime)
+      .slice(0, files.length - keep)
+      .forEach((f) => {
+        void unlink(f.full).catch(() => {});
+      });
+  } catch {
+    /* ignore */
+  }
+}
+
+// В renderer приложение грузится по file://, и <audio> отказывается играть
+// удалённые http(s) URL ("Media load rejected by URL safety check"). Поэтому
+// кастомные звуки качаем в main-процессе и отдаём локальный file:// URL.
+async function ensureSoundLocal(url) {
+  if (typeof url !== "string" || !url) return url;
+  let target = url;
+  if (target.startsWith("/")) {
+    target = "https://gachandra.ru" + target;
+  }
+  if (!/^https?:\/\//i.test(target)) return url;
+  try {
+    const hash = crypto.createHash("sha256").update(target).digest("hex");
+    const dir = path.join(app.getPath("userData"), "sound-cache");
+    await mkdir(dir, { recursive: true });
+    const entries = await readdir(dir).catch(() => []);
+    const existing = entries.find((f) => f.startsWith(hash + "."));
+    if (existing) {
+      return pathToFileURL(path.join(dir, existing)).href;
+    }
+    const res = await net.fetch(target);
+    if (!res.ok) return url;
+    const ext =
+      extFromUrl(target) || extFromContentType(res.headers.get("content-type")) || ".mp3";
+    const file = path.join(dir, hash + ext);
+    const buf = Buffer.from(await res.arrayBuffer());
+    await writeFile(file, buf);
+    void pruneSoundCache(dir, SOUND_CACHE_MAX_FILES);
+    return pathToFileURL(file).href;
+  } catch {
+    return url;
+  }
+}
+
 function openPickerWindow() {
   if (pickerWindow && !pickerWindow.isDestroyed()) {
     pickerWindow.focus();
@@ -435,6 +528,8 @@ app.whenReady().then(() => {
     const enabled = Boolean(payload && payload.enabled);
     return setGlobalPtt(typeof code === "string" ? code : "", enabled);
   });
+
+  ipcMain.handle("sound:get", (_e, url) => ensureSoundLocal(url));
 
   ipcMain.handle("screen:pick", (_e, prefs) => {
     if (pendingPickResolve) return { cancelled: true };
