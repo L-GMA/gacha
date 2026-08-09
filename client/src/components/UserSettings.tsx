@@ -213,7 +213,7 @@ function ProfileSection({ me, onChanged }: { me: User; onChanged: () => void }) 
           <label className="us-setting-row us-row-field us-row-field-stacked">
             <span className="us-field-label">Аватар</span>
             <div className="us-avatar-row">
-              <input value={avatar} onChange={(e) => setAvatar(e.target.value)} placeholder="https://…" />
+              <Avatar src={avatar.trim() || me.avatar} name={displayName} size={40} />
               <button
                 className="btn small"
                 type="button"
@@ -222,6 +222,15 @@ function ProfileSection({ me, onChanged }: { me: User; onChanged: () => void }) 
               >
                 {uploading ? "Загрузка…" : "Загрузить"}
               </button>
+              {avatar && (
+                <button
+                  className="btn small"
+                  type="button"
+                  onClick={() => setAvatar("")}
+                >
+                  Удалить
+                </button>
+              )}
               <input
                 ref={avatarFileRef}
                 type="file"

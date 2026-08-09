@@ -44,18 +44,19 @@ async function getUserVoiceAttributes(
 ): Promise<Record<string, string>> {
   try {
     const res = await query<{
+      login: string;
       nickname: string | null;
       avatar: string | null;
       join_sound_url: string | null;
       leave_sound_url: string | null;
     }>(
-      "SELECT nickname, avatar, join_sound_url, leave_sound_url FROM users WHERE id = $1",
+      "SELECT login, nickname, avatar, join_sound_url, leave_sound_url FROM users WHERE id = $1",
       [userId],
     );
     const row = res.rows[0];
     if (!row) return {};
     const attrs: Record<string, string> = {};
-    if (row.nickname) attrs.nickname = row.nickname;
+    attrs.nickname = row.nickname || row.login;
     if (row.avatar) attrs.avatar = row.avatar;
     if (row.join_sound_url) attrs.joinSound = row.join_sound_url;
     if (row.leave_sound_url) attrs.leaveSound = row.leave_sound_url;
@@ -88,13 +89,14 @@ export async function voiceRoutes(app: FastifyInstance) {
         return reply.status(403).send({ error: "Сначала войдите в канал" });
       }
     }
+    const attrs = await getUserVoiceAttributes(user.sub);
     const token = issueLiveKitToken({
       apiKey: config.livekit.apiKey,
       apiSecret: config.livekit.apiSecret,
       identity: `${user.sub}--${randomUUID()}`,
-      name: user.login,
+      name: attrs.nickname || user.login,
       room,
-      attributes: await getUserVoiceAttributes(user.sub),
+      attributes: attrs,
     });
     return { token, url: config.livekit.url, room };
   });

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import bcrypt from "bcryptjs";
 import { query } from "../db.js";
-import { isSafeImageUrl, LIMITS } from "../validate.js";
+import { isOwnImageUrl, LIMITS } from "../validate.js";
 
 const AUTH_RATE = { config: { rateLimit: { max: 15, timeWindow: "60 seconds" } } };
 
@@ -158,8 +158,10 @@ export async function authRoutes(app: FastifyInstance) {
     if (bio !== null && bio !== undefined && bio.length > LIMITS.bio) {
       return reply.status(400).send({ error: `Описание слишком длинное (максимум ${LIMITS.bio} символов)` });
     }
-    if (avatar && !isSafeImageUrl(avatar)) {
-      return reply.status(400).send({ error: "Ссылка на аватар должна быть на http(s) адрес" });
+    if (avatar && !(await isOwnImageUrl(avatar))) {
+      return reply
+        .status(400)
+        .send({ error: "Аватар можно задать только через загрузку файла" });
     }
     if (nickname) {
       const dup = await query("SELECT id FROM users WHERE nickname = $1 AND id <> $2", [
