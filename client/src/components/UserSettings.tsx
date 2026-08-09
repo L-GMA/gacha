@@ -410,6 +410,48 @@ function MicLevelMeter({ settings }: { settings: ReturnType<typeof getSettings> 
   );
 }
 
+function RangeRow({
+  label,
+  hint,
+  min,
+  max,
+  step,
+  value,
+  onChange,
+  disabled,
+  format,
+}: {
+  label: string;
+  hint?: string;
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  onChange: (v: number) => void;
+  disabled?: boolean;
+  format?: (v: number) => string;
+}) {
+  return (
+    <div className="us-setting-row">
+      <div className="us-setting-text">
+        <span>{label}</span>
+        {hint ? <small>{hint}</small> : null}
+      </div>
+      <input
+        type="range"
+        className="us-gain-range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(Number(e.target.value))}
+      />
+      <span className="us-gain-val">{format ? format(value) : String(value)}</span>
+    </div>
+  );
+}
+
 function SoundSection() {
   const [settings, setLocal] = useState(getSettings());
   const mics = useDevices("audioinput");
@@ -417,64 +459,176 @@ function SoundSection() {
   useEffect(() => subscribeSettings(() => setLocal(getSettings())), []);
 
   return (
-    <div className="us-group">
-      <div className="us-group-head">Голос</div>
-      <div className="us-stack">
-        <div className="us-setting-row">
-          <div className="us-setting-text">
-            <span>Режим микрофона</span>
-            <small>
-              Режим голоса — микрофон работает постоянно. Режим рации — говорите,
-              пока зажата клавиша или кнопка микрофона.
-            </small>
+    <>
+      <div className="us-group">
+        <div className="us-group-head">Микрофон</div>
+        <div className="us-stack">
+          <DeviceSelect
+            label="Микрофон"
+            devices={mics}
+            value={settings.micDeviceId}
+            onChange={(id) => setSetting("micDeviceId", id)}
+          />
+          <div className="us-setting-row">
+            <div className="us-setting-text">
+              <span>Режим микрофона</span>
+              <small>
+                Режим голоса — микрофон работает постоянно. Режим рации — говорите,
+                пока зажата клавиша или кнопка микрофона.
+              </small>
+            </div>
+            <select
+              className="us-select"
+              value={settings.voiceMode}
+              onChange={(e) =>
+                setSetting("voiceMode", e.target.value as "voice" | "ptt")
+              }
+            >
+              <option value="voice">Режим голоса</option>
+              <option value="ptt">Режим рации</option>
+            </select>
           </div>
-          <select
-            className="us-select"
-            value={settings.voiceMode}
-            onChange={(e) =>
-              setSetting("voiceMode", e.target.value as "voice" | "ptt")
-            }
-          >
-            <option value="voice">Режим голоса</option>
-            <option value="ptt">Режим рации</option>
-          </select>
+        </div>
+        <MicLevelMeter settings={settings} />
+      </div>
+
+      <div className="us-group">
+        <div className="us-group-head">Подавление шума (Krisp)</div>
+        <div className="us-stack">
+          <div className="us-setting-row">
+            <div className="us-setting-text">
+              <span>AI-шумоподавление</span>
+              <small>Очистка голоса от фонового шума в реальном времени.</small>
+            </div>
+            <Toggle checked={settings.krisp} onChange={(v) => setSetting("krisp", v)} label="Krisp" />
+          </div>
+          <div className="us-setting-row">
+            <div className="us-setting-text">
+              <span>Степень очистки</span>
+              <small>Чем выше, тем чище звук, но больше нагрузка на ЦП.</small>
+            </div>
+            <select
+              className="us-select"
+              value={settings.krispQuality}
+              disabled={!settings.krisp}
+              onChange={(e) => setSetting("krispQuality", e.target.value as "low" | "medium" | "high")}
+            >
+              <option value="low">Минимальная</option>
+              <option value="medium">Средняя</option>
+              <option value="high">Максимальная</option>
+            </select>
+          </div>
+          <div className="us-setting-row">
+            <div className="us-setting-text">
+              <span>Подавление фоновых голосов</span>
+              <small>
+                Убирает чужие голоса на фоне (люди, ТВ, кафе). Работает не на всех
+                микрофонах.
+              </small>
+            </div>
+            <Toggle
+              checked={settings.krispBvc}
+              disabled={!settings.krisp}
+              onChange={(v) => setSetting("krispBvc", v)}
+              label="BVC"
+            />
+          </div>
         </div>
       </div>
-      <MicLevelMeter settings={settings} />
-      <div className="us-stack">
-        <DeviceSelect
-          label="Микрофон"
-          devices={mics}
-          value={settings.micDeviceId}
-          onChange={(id) => setSetting("micDeviceId", id)}
-        />
-      </div>
-      <div className="us-stack">
-        <div className="us-setting-row">
-          <div className="us-setting-text">
-            <span>Подавление шума (Krisp)</span>
-            <small>AI-очистка голоса от фонового шума.</small>
+
+      <div className="us-group">
+        <div className="us-group-head">Системные фильтры микрофона</div>
+        <div className="us-stack">
+          <div className="us-setting-row">
+            <div className="us-setting-text">
+              <span>Шумоподавление устройства</span>
+              <small>Встроенный фильтр системы/браузера — дополнительный слой к AI-очистке.</small>
+            </div>
+            <Toggle
+              checked={settings.micNoiseSuppression}
+              onChange={(v) => setSetting("micNoiseSuppression", v)}
+              label="NS"
+            />
           </div>
-          <Toggle checked={settings.krisp} onChange={(v) => setSetting("krisp", v)} label="Krisp" />
-        </div>
-        <div className="us-setting-row">
-          <div className="us-setting-text">
-            <span>Степень подавления шума</span>
-            <small>Настройка влияет на нагрузку ЦП.</small>
+          <div className="us-setting-row">
+            <div className="us-setting-text">
+              <span>Подавление эха</span>
+              <small>Убирает эхо от динамиков. Рекомендуется держать включённым.</small>
+            </div>
+            <Toggle
+              checked={settings.micEchoCancellation}
+              onChange={(v) => setSetting("micEchoCancellation", v)}
+              label="AEC"
+            />
           </div>
-          <select
-            className="us-select"
-            value={settings.krispQuality}
-            disabled={!settings.krisp}
-            onChange={(e) => setSetting("krispQuality", e.target.value as "low" | "medium" | "high")}
-          >
-            <option value="low">Минимальная</option>
-            <option value="medium">Средняя</option>
-            <option value="high">Максимальная</option>
-          </select>
+          <div className="us-setting-row">
+            <div className="us-setting-text">
+              <span>Автоуровень (AGC)</span>
+              <small>Автоматически подстраивает громкость. Выключите, если голос «плавает».</small>
+            </div>
+            <Toggle
+              checked={settings.micAutoGainControl}
+              onChange={(v) => setSetting("micAutoGainControl", v)}
+              label="AGC"
+            />
+          </div>
+          <p className="hint">Изменения применяются к текущему микрофону сразу.</p>
         </div>
       </div>
-    </div>
+
+      <div className="us-group">
+        <div className="us-group-head">Нойз-гейт</div>
+        <div className="us-stack">
+          <div className="us-setting-row">
+            <div className="us-setting-text">
+              <span>Шумовой затвор</span>
+              <small>
+                Приглушает микрофон в тишине — убирает дыхание, клавиатуру и фоновый
+                гул в паузах между репликами.
+              </small>
+            </div>
+            <Toggle checked={settings.gate} onChange={(v) => setSetting("gate", v)} label="Гейт" />
+          </div>
+          <RangeRow
+            label="Порог срабатывания"
+            hint="Уровень, ниже которого микрофон приглушается"
+            min={1}
+            max={60}
+            step={1}
+            value={settings.gateThreshold}
+            disabled={!settings.gate}
+            onChange={(v) => setSetting("gateThreshold", v)}
+            format={(v) => `${v}%`}
+          />
+          <RangeRow
+            label="Открытие (атака)"
+            hint="Как быстро микрофон открывается в начале речи"
+            min={5}
+            max={100}
+            step={5}
+            value={settings.gateAttackMs}
+            disabled={!settings.gate}
+            onChange={(v) => setSetting("gateAttackMs", v)}
+            format={(v) => `${v} мс`}
+          />
+          <RangeRow
+            label="Закрытие (сброс)"
+            hint="Как быстро микрофон приглушается после речи"
+            min={50}
+            max={800}
+            step={25}
+            value={settings.gateReleaseMs}
+            disabled={!settings.gate}
+            onChange={(v) => setSetting("gateReleaseMs", v)}
+            format={(v) => `${v} мс`}
+          />
+          <p className="hint">
+            Если гейт «режет» начала слов — снизьте порог или увеличьте время открытия.
+            Слушайте результат через «Прослушать микрофон».
+          </p>
+        </div>
+      </div>
+    </>
   );
 }
 

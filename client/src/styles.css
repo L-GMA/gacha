@@ -2855,6 +2855,11 @@ input:focus {
   background: #0a0a0c;
 }
 
+.toggle.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* ---------- role card ---------- */
 
 .role-card {

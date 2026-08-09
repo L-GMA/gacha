@@ -16,6 +16,14 @@ export type UserSettings = {
   micGain: number;
   krisp: boolean;
   krispQuality: KrispQuality;
+  krispBvc: boolean;
+  gate: boolean;
+  gateThreshold: number;
+  gateAttackMs: number;
+  gateReleaseMs: number;
+  micNoiseSuppression: boolean;
+  micEchoCancellation: boolean;
+  micAutoGainControl: boolean;
   voiceMode: VoiceMode;
   hotkeys: Hotkeys;
 };
@@ -29,6 +37,14 @@ const DEFAULTS: UserSettings = {
   micGain: 1,
   krisp: true,
   krispQuality: "medium",
+  krispBvc: false,
+  gate: true,
+  gateThreshold: 8,
+  gateAttackMs: 15,
+  gateReleaseMs: 250,
+  micNoiseSuppression: true,
+  micEchoCancellation: true,
+  micAutoGainControl: true,
   voiceMode: "voice",
   hotkeys: { ptt: "", mute: "", deafen: "" },
 };

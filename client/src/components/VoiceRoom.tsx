@@ -689,7 +689,7 @@ export function VoiceRoom({
         room.on(RoomEvent.LocalTrackPublished, (pub) => {
           if (pub.source === Track.Source.Microphone && pub.track) {
             const s = getSettings();
-            void applyKrisp(pub.track as LocalAudioTrack, s.krisp, s.krispQuality);
+            void applyKrisp(pub.track as LocalAudioTrack, s.krisp, s.krispQuality, s.krispBvc);
           }
           if (pub.source === Track.Source.ScreenShare && pub.track) {
             const me = meIdentityRef.current;
@@ -800,7 +800,7 @@ export function VoiceRoom({
           const pub = lk.localParticipant.getTrackPublication(Track.Source.Microphone);
           if (pub?.track) {
             const s = getSettings();
-            void applyKrisp(pub.track as LocalAudioTrack, s.krisp, s.krispQuality);
+            void applyKrisp(pub.track as LocalAudioTrack, s.krisp, s.krispQuality, s.krispBvc);
           }
         });
 
