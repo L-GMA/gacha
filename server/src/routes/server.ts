@@ -63,13 +63,15 @@ export async function serverRoutes(app: FastifyInstance) {
       nickname: string | null;
       avatar: string | null;
       bio: string | null;
+      join_sound_url: string | null;
+      leave_sound_url: string | null;
       banned: boolean;
       created_at: string;
       invited_by: string | null;
       online: boolean;
       roles: unknown;
     }>(
-      `SELECT u.id, u.login, u.nickname, u.avatar, u.bio, u.banned, u.created_at,
+      `SELECT u.id, u.login, u.nickname, u.avatar, u.bio, u.join_sound_url, u.leave_sound_url, u.banned, u.created_at,
               inv.login AS invited_by,
               (u.last_seen IS NOT NULL AND u.last_seen > now() - interval '90 seconds') AS online,
               COALESCE(json_agg(json_build_object('id', r.id, 'name', r.name, 'kind', r.kind, 'permissions', r.permissions, 'color', r.color, 'position', r.position, 'highlight', r.highlight) ORDER BY r.position) FILTER (WHERE r.id IS NOT NULL), '[]') AS roles
@@ -97,6 +99,8 @@ export async function serverRoutes(app: FastifyInstance) {
           nickname: null,
           avatar: null,
           bio: null,
+          join_sound_url: null,
+          leave_sound_url: null,
           banned: false,
           created_at: "",
           invited_by: null,

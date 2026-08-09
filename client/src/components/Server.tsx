@@ -31,7 +31,6 @@ export function Server({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [userSettingsOpen, setUserSettingsOpen] = useState(false);
   const [profileId, setProfileId] = useState<string | null>(null);
-  const [profileEdit, setProfileEdit] = useState(false);
   const [dmOpen, setDmOpen] = useState(false);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
@@ -240,8 +239,7 @@ export function Server({
     if (m === "home") setActiveConvId(null);
   };
 
-  const openProfile = (edit: boolean) => {
-    setProfileEdit(edit);
+  const openProfile = () => {
     setProfileId(data.me.id);
   };
 
@@ -335,6 +333,8 @@ export function Server({
                 channelName={voiceChannelName}
                 meName={meName}
                 meAvatar={data.me.avatar}
+                meJoinSound={data.me.join_sound_url}
+                meLeaveSound={data.me.leave_sound_url}
                 onLeave={() => {
                   setVoiceChannelId(null);
                   setActiveChannelId((cur) => (cur === voiceChannelId ? null : cur));
@@ -382,7 +382,7 @@ export function Server({
         )}
       </div>
 
-      <div className="user-panel" title="Мой профиль" onClick={() => openProfile(false)}>
+      <div className="user-panel" title="Мой профиль" onClick={openProfile}>
         {voiceStatus?.connected && (
           <div className="user-panel-voice" onClick={(e) => e.stopPropagation()}>
             <span className="voice-conn-icon">
@@ -510,13 +510,7 @@ export function Server({
       {profileMember && (
         <ProfileModal
           member={profileMember}
-          meId={data.me.id}
-          startEditing={profileEdit}
-          onClose={() => {
-            setProfileId(null);
-            setProfileEdit(false);
-          }}
-          onChanged={() => load()}
+          onClose={() => setProfileId(null)}
         />
       )}
     </div>

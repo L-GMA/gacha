@@ -12,6 +12,7 @@ export const LIMITS = {
 
 export function isSafeImageUrl(value: string): boolean {
   if (value.length > LIMITS.imageUrl) return false;
+  if (value.startsWith("/uploads/")) return true;
   let url: URL;
   try {
     url = new URL(value);

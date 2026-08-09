@@ -1906,6 +1906,15 @@ input:focus {
   word-break: break-word;
 }
 
+.message-text .chat-link {
+  color: #6cb2ff;
+  text-decoration: none;
+}
+
+.message-text .chat-link:hover {
+  text-decoration: underline;
+}
+
 .chat-error {
   padding: 0 18px;
 }
@@ -3440,6 +3449,32 @@ input:focus {
   border-color: rgba(255, 255, 255, 0.45);
   background: rgba(255, 255, 255, 0.08);
   box-shadow: none;
+}
+
+.us-avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.us-avatar-row input {
+  flex: 1;
+}
+
+.us-avatar-row .btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.us-sound-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.us-sound-actions .btn {
+  white-space: nowrap;
 }
 
 .us-profile {

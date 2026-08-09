@@ -3,6 +3,7 @@ import { api, type ChatMessage, type Conversation, type Member } from "../api.js
 import { highestRoleColor } from "../roleColor.js";
 import { Avatar } from "./Avatar.js";
 import { ChatInput } from "./ChatInput.js";
+import { linkify } from "../linkify.js";
 
 function fmtTime(iso: string): string {
   const d = new Date(iso);
@@ -148,7 +149,7 @@ export function Chat({
                     <img src={m.image_url} alt="" loading="lazy" />
                   </a>
                 )}
-                {m.content && <div className="message-text">{m.content}</div>}
+                {m.content && <div className="message-text">{linkify(m.content)}</div>}
               </div>
             </div>
           );

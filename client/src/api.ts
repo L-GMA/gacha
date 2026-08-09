@@ -20,6 +20,8 @@ export type User = {
   nickname: string | null;
   avatar: string | null;
   bio: string | null;
+  join_sound_url?: string | null;
+  leave_sound_url?: string | null;
   banned: boolean;
   online?: boolean;
   roles: Role[];
@@ -243,6 +245,16 @@ export const api = {
     form.append("file", file);
     return request<{ url: string }>("/upload", { method: "POST", body: form });
   },
+  uploadSound: (type: "join" | "leave", file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<{ url: string }>(`/me/sound/${type}`, {
+      method: "PUT",
+      body: form,
+    });
+  },
+  clearSound: (type: "join" | "leave") =>
+    request<{ ok: boolean }>(`/me/sound/${type}`, { method: "DELETE" }),
 
   settings: () => request<SettingsData>("/server/settings"),
 

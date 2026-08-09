@@ -137,3 +137,6 @@ BEGIN
       SELECT id, 'Общий', 'voice', 0 FROM categories WHERE name = 'Голосовые';
   END IF;
 END $$;
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS join_sound_url TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS leave_sound_url TEXT;

@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type RefObject,
+} from "react";
 import { api, type User } from "../api.js";
 import { highestRoleColor } from "../roleColor.js";
 import { Avatar } from "./Avatar.js";
@@ -96,7 +102,9 @@ export function UserSettings({
           {section === "profile" && <ProfileSection me={me} onChanged={onChanged} />}
           {section === "sound" && <SoundSection />}
           {section === "camera" && <CameraSection />}
-          {section === "notifications" && <NotificationsSection />}
+          {section === "notifications" && (
+            <NotificationsSection me={me} onChanged={onChanged} />
+          )}
         </div>
       </section>
     </div>
@@ -125,6 +133,8 @@ function ProfileSection({ me, onChanged }: { me: User; onChanged: () => void }) 
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const avatarFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setNickname(me.nickname ?? "");
@@ -134,6 +144,22 @@ function ProfileSection({ me, onChanged }: { me: User; onChanged: () => void }) 
 
   const roleColor = highestRoleColor(me.roles);
   const displayName = nickname.trim() || me.login;
+
+  const handleAvatarFile = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    e.target.value = "";
+    if (!file) return;
+    setError("");
+    setUploading(true);
+    try {
+      const { url } = await api.uploadImage(file);
+      setAvatar(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка загрузки");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const save = async () => {
     setError("");
@@ -171,7 +197,24 @@ function ProfileSection({ me, onChanged }: { me: User; onChanged: () => void }) 
           </label>
           <label className="us-setting-row us-row-field us-row-field-stacked">
             <span className="us-field-label">Аватар</span>
-            <input value={avatar} onChange={(e) => setAvatar(e.target.value)} placeholder="https://…" />
+            <div className="us-avatar-row">
+              <input value={avatar} onChange={(e) => setAvatar(e.target.value)} placeholder="https://…" />
+              <button
+                className="btn small"
+                type="button"
+                disabled={uploading}
+                onClick={() => avatarFileRef.current?.click()}
+              >
+                {uploading ? "Загрузка…" : "Загрузить"}
+              </button>
+              <input
+                ref={avatarFileRef}
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={handleAvatarFile}
+              />
+            </div>
           </label>
           <label className="us-setting-row us-row-field us-row-field-stacked">
             <span className="us-field-label">О себе</span>
@@ -361,16 +404,6 @@ function SoundSection() {
 
   return (
     <div className="us-group">
-      <div className="us-group-head">Звук</div>
-      <div className="us-stack">
-        <div className="us-setting-row">
-          <div className="us-setting-text">
-            <span>Звуки входа и выхода из голосового канала</span>
-            <small>Звуковые сигналы при подключении/отключении участников</small>
-          </div>
-          <Toggle checked={settings.sounds} onChange={(v) => setSetting("sounds", v)} label="Звуки" />
-        </div>
-      </div>
       <div className="us-group-head">Голос</div>
       <MicLevelMeter settings={settings} />
       <div className="us-stack">
@@ -473,11 +506,51 @@ function CameraSection() {
   );
 }
 
-function NotificationsSection() {
+function audioDuration(file: File): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const el = new Audio();
+    const cleanup = () => {
+      URL.revokeObjectURL(url);
+      el.src = "";
+    };
+    el.preload = "metadata";
+    el.onloadedmetadata = () => {
+      const d = el.duration;
+      cleanup();
+      resolve(Number.isFinite(d) ? d : 0);
+    };
+    el.onerror = () => {
+      cleanup();
+      reject(new Error("Не удалось прочитать аудиофайл"));
+    };
+    el.src = url;
+  });
+}
+
+const SOUND_MIME = [
+  "audio/mpeg",
+  "audio/mp3",
+  "audio/wav",
+  "audio/wave",
+  "audio/x-wav",
+  "audio/ogg",
+  "audio/opus",
+  "audio/webm",
+  "audio/mp4",
+  "audio/aac",
+  "audio/x-m4a",
+];
+
+function NotificationsSection({ me, onChanged }: { me: User; onChanged: () => void }) {
   const [settings, setLocal] = useState(getSettings());
   const [perm, setPerm] = useState<string>(
     typeof Notification !== "undefined" ? Notification.permission : "unsupported",
   );
+  const [busy, setBusy] = useState<"join" | "leave" | null>(null);
+  const [error, setError] = useState("");
+  const joinInputRef = useRef<HTMLInputElement>(null);
+  const leaveInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => subscribeSettings(() => setLocal(getSettings())), []);
 
@@ -491,37 +564,181 @@ function NotificationsSection() {
     }
   };
 
-  return (
-    <div className="us-group">
-      <div className="us-group-head">Уведомления</div>
-      <div className="us-stack">
-        <div className="us-setting-row">
-          <div className="us-setting-text">
-            <span>Уведомления о новых сообщениях</span>
-            <small>Показывать системные уведомления, когда приходят сообщения</small>
-          </div>
-          <Toggle checked={settings.notifications} onChange={(v) => setSetting("notifications", v)} label="Уведомления" />
-        </div>
+  const pickSound = async (type: "join" | "leave", file: File | null) => {
+    setError("");
+    if (!file) return;
+    if (!SOUND_MIME.includes(file.type.toLowerCase())) {
+      setError("Можно загружать только аудио (mp3, wav, ogg, m4a)");
+      return;
+    }
+    let duration = 0;
+    try {
+      duration = await audioDuration(file);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось прочитать аудиофайл");
+      return;
+    }
+    if (duration > 3.05) {
+      setError("Звук слишком длинный — максимум 3 секунды");
+      return;
+    }
+    setBusy(type);
+    try {
+      await api.uploadSound(type, file);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка загрузки");
+    } finally {
+      setBusy(null);
+    }
+  };
 
-        {typeof Notification !== "undefined" && (
+  const resetSound = async (type: "join" | "leave") => {
+    setError("");
+    setBusy(type);
+    try {
+      await api.clearSound(type);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <>
+      <div className="us-group">
+        <div className="us-group-head">Уведомления</div>
+        <div className="us-stack">
           <div className="us-setting-row">
             <div className="us-setting-text">
-              <span>Разрешение браузера</span>
-              <small>
-                {perm === "granted"
-                  ? "Уведомления разрешены"
-                  : perm === "denied"
-                    ? "Уведомления заблокированы браузером"
-                    : "Разрешение ещё не выдано"}
-              </small>
+              <span>Уведомления о новых сообщениях</span>
+              <small>Показывать системные уведомления, когда приходят сообщения</small>
             </div>
-            {perm !== "granted" && perm !== "denied" && (
-              <button className="btn small" onClick={requestPermission}>
-                Разрешить
-              </button>
-            )}
+            <Toggle checked={settings.notifications} onChange={(v) => setSetting("notifications", v)} label="Уведомления" />
           </div>
+
+          {typeof Notification !== "undefined" && (
+            <div className="us-setting-row">
+              <div className="us-setting-text">
+                <span>Разрешение браузера</span>
+                <small>
+                  {perm === "granted"
+                    ? "Уведомления разрешены"
+                    : perm === "denied"
+                      ? "Уведомления заблокированы браузером"
+                      : "Разрешение ещё не выдано"}
+                </small>
+              </div>
+              {perm !== "granted" && perm !== "denied" && (
+                <button className="btn small" onClick={requestPermission}>
+                  Разрешить
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="us-group">
+        <div className="us-group-head">Звуки голосового канала</div>
+        <div className="us-stack">
+          <div className="us-setting-row">
+            <div className="us-setting-text">
+              <span>Звуки входа и выхода</span>
+              <small>Сигналы при подключении и отключении участников</small>
+            </div>
+            <Toggle checked={settings.sounds} onChange={(v) => setSetting("sounds", v)} label="Звуки" />
+          </div>
+
+          <SoundUploadRow
+            label="Звук при входе"
+            url={me.join_sound_url ?? null}
+            busy={busy === "join"}
+            inputRef={joinInputRef}
+            onPick={(f) => pickSound("join", f)}
+            onReset={() => resetSound("join")}
+          />
+          <SoundUploadRow
+            label="Звук при выходе"
+            url={me.leave_sound_url ?? null}
+            busy={busy === "leave"}
+            inputRef={leaveInputRef}
+            onPick={(f) => pickSound("leave", f)}
+            onReset={() => resetSound("leave")}
+          />
+        </div>
+        <p className="hint">
+          Свой звук услышат все участники голосового канала, когда вы заходите или выходите.
+          Длительность — не более 3 секунд.
+        </p>
+        {error && <p className="error">{error}</p>}
+      </div>
+    </>
+  );
+}
+
+function SoundUploadRow({
+  label,
+  url,
+  busy,
+  inputRef,
+  onPick,
+  onReset,
+}: {
+  label: string;
+  url: string | null;
+  busy: boolean;
+  inputRef: RefObject<HTMLInputElement | null>;
+  onPick: (file: File | null) => void;
+  onReset: () => void;
+}) {
+  const play = () => {
+    if (!url) return;
+    try {
+      void new Audio(url).play().catch(() => {});
+    } catch {
+      /* ignore */
+    }
+  };
+
+  return (
+    <div className="us-setting-row">
+      <div className="us-setting-text">
+        <span>{label}</span>
+        <small>{url ? "Ваш звук (до 3 секунд)" : "Стандартный звук"}</small>
+      </div>
+      <div className="us-sound-actions">
+        {url && (
+          <button className="btn small" type="button" onClick={play}>
+            Играть
+          </button>
         )}
+        <button
+          className="btn small"
+          type="button"
+          disabled={busy}
+          onClick={() => inputRef.current?.click()}
+        >
+          {busy ? "Загрузка…" : "Загрузить"}
+        </button>
+        {url && (
+          <button className="btn small ghost" type="button" disabled={busy} onClick={onReset}>
+            Сбросить
+          </button>
+        )}
+        <input
+          ref={inputRef}
+          type="file"
+          accept="audio/*"
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0] ?? null;
+            e.target.value = "";
+            onPick(file);
+          }}
+        />
       </div>
     </div>
   );

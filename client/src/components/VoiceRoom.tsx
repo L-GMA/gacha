@@ -169,6 +169,8 @@ export function VoiceRoom({
   channelName,
   meName,
   meAvatar,
+  meJoinSound,
+  meLeaveSound,
   onLeave,
   onStatus,
   onSpeaking,
@@ -181,6 +183,8 @@ export function VoiceRoom({
   channelName: string;
   meName: string;
   meAvatar: string | null;
+  meJoinSound?: string | null;
+  meLeaveSound?: string | null;
   onLeave: () => void;
   onStatus?: (status: VoiceStatus | null) => void;
   onSpeaking?: (ids: string[]) => void;
@@ -616,7 +620,7 @@ export function VoiceRoom({
         room.on(RoomEvent.ParticipantConnected, (p: RemoteParticipant) => {
           const mine = room?.localParticipant.joinedAt?.getTime() ?? 0;
           const theirs = p.joinedAt?.getTime() ?? mine + 1;
-          if (theirs >= mine) playJoinSound();
+          if (theirs >= mine) playJoinSound(p.attributes?.joinSound);
           refresh();
         });
         room.on(RoomEvent.ParticipantDisconnected, (p) => {
@@ -642,7 +646,7 @@ export function VoiceRoom({
           if (spb) {
             detachScreenAudio(spb.track, p);
           }
-          playLeaveSound();
+          playLeaveSound(p.attributes?.leaveSound);
           refresh();
         });
         room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
@@ -730,7 +734,7 @@ export function VoiceRoom({
         meIdentityRef.current = lk.localParticipant.identity;
         console.log("[voice] connected, room:", lk.name, "canPlayAudio:", lk.canPlaybackAudio);
         (window as unknown as Record<string, unknown>).__gachaVoice = lk;
-        playJoinSound();
+        playJoinSound(meJoinSound ?? lk.localParticipant.attributes?.joinSound);
         joinedRef.current = true;
         setAudioBlocked(!lk.canPlaybackAudio);
 
@@ -864,7 +868,10 @@ export function VoiceRoom({
       alive = false;
       window.removeEventListener("pointerdown", resumeMix);
       window.removeEventListener("keydown", resumeMix);
-      if (joinedRef.current) playLeaveSound();
+      if (joinedRef.current)
+        playLeaveSound(
+          meLeaveSound ?? roomRef.current?.localParticipant.attributes?.leaveSound,
+        );
       if (pingTimer) clearInterval(pingTimer);
       if (levelTimer) clearInterval(levelTimer);
       audioElsRef.current.clear();

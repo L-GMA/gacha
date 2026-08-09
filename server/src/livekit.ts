@@ -7,6 +7,7 @@ type LiveKitTokenOptions = {
   name?: string;
   room: string;
   ttlSeconds?: number;
+  attributes?: Record<string, string>;
 };
 
 export function issueLiveKitToken(opts: LiveKitTokenOptions): string {
@@ -23,6 +24,9 @@ export function issueLiveKitToken(opts: LiveKitTokenOptions): string {
       room: opts.room,
       roomJoin: true,
       canUpdateOwnMetadata: true,
+      ...(opts.attributes && Object.keys(opts.attributes).length > 0
+        ? { attributes: opts.attributes }
+        : {}),
     },
   };
   const headerB64 = Buffer.from(JSON.stringify(header)).toString("base64url");

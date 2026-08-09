@@ -115,10 +115,12 @@ export async function authRoutes(app: FastifyInstance) {
       nickname: string | null;
       avatar: string | null;
       bio: string | null;
+      join_sound_url: string | null;
+      leave_sound_url: string | null;
       banned: boolean;
       roles: unknown;
     }>(
-      `SELECT u.id, u.login, u.nickname, u.avatar, u.bio, u.banned,
+      `SELECT u.id, u.login, u.nickname, u.avatar, u.bio, u.join_sound_url, u.leave_sound_url, u.banned,
               COALESCE(json_agg(json_build_object('id', r.id, 'name', r.name, 'kind', r.kind, 'permissions', r.permissions, 'color', r.color, 'position', r.position, 'highlight', r.highlight) ORDER BY r.position) FILTER (WHERE r.id IS NOT NULL), '[]') AS roles
        FROM users u
        LEFT JOIN user_roles ur ON ur.user_id = u.id
