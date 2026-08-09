@@ -13,6 +13,11 @@ interface Window {
     getVersion?: () => Promise<string>;
     onUpdateStatus?: (callback: (status: UpdateStatus) => void) => () => void;
     skipUpdate?: () => void;
+    setGlobalPtt?: (payload: {
+      code: string;
+      enabled: boolean;
+    }) => Promise<{ mapped: boolean }>;
+    onGlobalPtt?: (callback: (down: boolean) => void) => () => void;
   };
   gachaScreen?: {
     pick?: (prefs: { quality: string; fps: number }) => Promise<

@@ -221,6 +221,7 @@ export function VoiceRoom({
   const [error, setError] = useState("");
   const [ping, setPing] = useState<number | null>(null);
   const [voiceMode, setVoiceMode] = useState(getSettings().voiceMode);
+  const [globalPttActive, setGlobalPttActive] = useState(false);
   const [volumes, setVolumes] = useState<Record<string, number>>({});
   const [screenVolumes, setScreenVolumes] = useState<Record<string, number>>({});
   const [sharingScreen, setSharingScreen] = useState(false);
@@ -1049,6 +1050,36 @@ export function VoiceRoom({
     };
   }, []);
 
+  useEffect(() => {
+    const desktop = window.desktop;
+    const onGlobalPtt = desktop?.onGlobalPtt;
+    const setGlobalPtt = desktop?.setGlobalPtt;
+    if (!onGlobalPtt || !setGlobalPtt) return;
+    const offPtt = onGlobalPtt((down) => {
+      if (down) pttPress();
+      else pttRelease();
+    });
+    let last = { code: "", enabled: false };
+    const sync = () => {
+      const s = getSettings();
+      const enabled = s.voiceMode === "ptt";
+      const code = enabled ? s.hotkeys.ptt : "";
+      if (code === last.code && enabled === last.enabled) return;
+      last = { code, enabled };
+      setGlobalPtt({ code, enabled })
+        .then((res) => setGlobalPttActive(enabled && res.mapped))
+        .catch(() => setGlobalPttActive(false));
+    };
+    sync();
+    const unsub = subscribeSettings(sync);
+    return () => {
+      offPtt();
+      unsub();
+      setGlobalPttActive(false);
+      setGlobalPtt({ code: "", enabled: false }).catch(() => {});
+    };
+  }, []);
+
   const recomputeMic = async () => {
     const room = roomRef.current;
     if (!room) return;
@@ -1527,6 +1558,9 @@ export function VoiceRoom({
             </>
           ) : null}
           , чтобы говорить
+          {globalPttActive
+            ? " — клавиша работает из любого окна и из трея"
+            : ""}
         </p>
       )}
 

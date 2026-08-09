@@ -1,6 +1,6 @@
 {
   "name": "gacha-desktop",
-  "version": "0.5.31",
+  "version": "0.5.32",
   "private": true,
   "description": "GACHA desktop app",
   "author": "goowesh",
@@ -15,7 +15,8 @@
     "publish": "npm run build:desktop && electron-builder --publish always"
   },
   "dependencies": {
-    "electron-updater": "^6.8.9"
+    "electron-updater": "^6.8.9",
+    "uiohook-napi": "^1.5.5"
   },
   "devDependencies": {
     "electron": "^43.3.0",
@@ -41,11 +42,18 @@
     ],
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     },
     "mac": {
-      "target": ["dmg"],
+      "target": [
+        "dmg"
+      ],
       "extendInfo": {
         "NSAudioCaptureUsageDescription": "GACHA использует доступ к записи звука для трансляции системного аудио в голосовых каналах."
       }

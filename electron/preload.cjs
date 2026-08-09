@@ -8,6 +8,12 @@ contextBridge.exposeInMainWorld("desktop", {
     return () => ipcRenderer.removeListener("update:status", listener);
   },
   skipUpdate: () => ipcRenderer.send("update:skip"),
+  setGlobalPtt: (payload) => ipcRenderer.invoke("ptt:set", payload),
+  onGlobalPtt: (callback) => {
+    const listener = (_event, down) => callback(Boolean(down));
+    ipcRenderer.on("voice:global-ptt", listener);
+    return () => ipcRenderer.removeListener("voice:global-ptt", listener);
+  },
 });
 
 contextBridge.exposeInMainWorld("gachaScreen", {

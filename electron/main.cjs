@@ -5,9 +5,13 @@ const {
   shell,
   desktopCapturer,
   session,
+  Tray,
+  Menu,
+  nativeImage,
 } = require("electron");
 const path = require("path");
 const { autoUpdater } = require("electron-updater");
+const { uIOhook, UiohookKey } = require("uiohook-napi");
 
 let mainWindow = null;
 let splashWindow = null;
@@ -17,6 +21,11 @@ let pendingPickResolve = null;
 let pendingScreenSelection = null;
 let currentScreenPrefs = { quality: "1080", fps: 30 };
 const pickerSources = new Map();
+
+let tray = null;
+let isQuitting = false;
+let globalPtt = { keycode: null, mouseButton: null, enabled: false };
+let hookRunning = false;
 
 function sendUpdateStatus(status) {
   if (splashWindow && !splashWindow.isDestroyed()) {
@@ -63,11 +72,202 @@ function openMainWindow() {
 
   mainWindow.loadFile(path.join(__dirname, "..", "client", "dist", "index.html"));
 
+  mainWindow.on("close", (e) => {
+    if (isQuitting) return;
+    e.preventDefault();
+    mainWindow.hide();
+  });
+
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
 
   closeSplash();
+}
+
+function showMainWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  } else {
+    openMainWindow();
+  }
+}
+
+function createTray() {
+  const isMac = process.platform === "darwin";
+  const iconPath = path.join(
+    __dirname,
+    isMac ? "tray-iconTemplate.png" : "tray-icon.png",
+  );
+  tray = new Tray(nativeImage.createFromPath(iconPath));
+  tray.setToolTip("GACHA");
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: "Открыть GACHA", click: () => showMainWindow() },
+      { type: "separator" },
+      {
+        label: "Выйти",
+        click: () => {
+          isQuitting = true;
+          app.quit();
+        },
+      },
+    ]),
+  );
+  if (process.platform === "win32") {
+    tray.on("click", () => showMainWindow());
+  }
+  tray.on("double-click", () => showMainWindow());
+}
+
+const WEB_TO_UIOHOOK_DIRECT = {
+  Space: UiohookKey.Space,
+  Escape: UiohookKey.Escape,
+  Tab: UiohookKey.Tab,
+  Enter: UiohookKey.Enter,
+  NumpadEnter: UiohookKey.NumpadEnter,
+  Backspace: UiohookKey.Backspace,
+  CapsLock: UiohookKey.CapsLock,
+  NumLock: UiohookKey.NumLock,
+  ScrollLock: UiohookKey.ScrollLock,
+  PageUp: UiohookKey.PageUp,
+  PageDown: UiohookKey.PageDown,
+  Home: UiohookKey.Home,
+  End: UiohookKey.End,
+  Insert: UiohookKey.Insert,
+  Delete: UiohookKey.Delete,
+  ArrowUp: UiohookKey.ArrowUp,
+  ArrowDown: UiohookKey.ArrowDown,
+  ArrowLeft: UiohookKey.ArrowLeft,
+  ArrowRight: UiohookKey.ArrowRight,
+  ControlLeft: UiohookKey.Ctrl,
+  ControlRight: UiohookKey.CtrlRight,
+  ShiftLeft: UiohookKey.Shift,
+  ShiftRight: UiohookKey.ShiftRight,
+  AltLeft: UiohookKey.Alt,
+  AltRight: UiohookKey.AltRight,
+  MetaLeft: UiohookKey.Meta,
+  MetaRight: UiohookKey.MetaRight,
+  Semicolon: UiohookKey.Semicolon,
+  Equal: UiohookKey.Equal,
+  Comma: UiohookKey.Comma,
+  Minus: UiohookKey.Minus,
+  Period: UiohookKey.Period,
+  Slash: UiohookKey.Slash,
+  Backquote: UiohookKey.Backquote,
+  BracketLeft: UiohookKey.BracketLeft,
+  Backslash: UiohookKey.Backslash,
+  BracketRight: UiohookKey.BracketRight,
+  Quote: UiohookKey.Quote,
+};
+
+const WEB_MOUSE_TO_UIOHOOK = { 1: 3, 3: 4, 4: 5 };
+
+// Переводит web-код горячей клавиши ("KeyA", "F1", "Mouse3"…) в код
+// системного хука. null — клавиша не поддерживается для глобального PTT.
+function webCodeToUiohook(code) {
+  if (!code || typeof code !== "string") return null;
+  const mouse = code.match(/^Mouse(\d+)$/);
+  if (mouse) {
+    const button = WEB_MOUSE_TO_UIOHOOK[Number(mouse[1])];
+    return button ? { mouseButton: button } : null;
+  }
+  if (WEB_TO_UIOHOOK_DIRECT[code] != null) {
+    return { keycode: WEB_TO_UIOHOOK_DIRECT[code] };
+  }
+  const key = code.match(/^Key([A-Z])$/);
+  if (key && UiohookKey[key[1]] != null) return { keycode: UiohookKey[key[1]] };
+  const digit = code.match(/^Digit([0-9])$/);
+  if (digit && UiohookKey[digit[1]] != null) {
+    return { keycode: UiohookKey[digit[1]] };
+  }
+  const f = code.match(/^F(\d{1,2})$/);
+  if (f && UiohookKey[`F${f[1]}`] != null) {
+    return { keycode: UiohookKey[`F${f[1]}`] };
+  }
+  const num = code.match(/^Numpad(\d)$/);
+  if (num && UiohookKey[`Numpad${num[1]}`] != null) {
+    return { keycode: UiohookKey[`Numpad${num[1]}`] };
+  }
+  return null;
+}
+
+function sendGlobalPtt(down) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("voice:global-ptt", down);
+  }
+}
+
+function onHookKeyDown(e) {
+  if (globalPtt.enabled && globalPtt.keycode != null && e.keycode === globalPtt.keycode) {
+    sendGlobalPtt(true);
+  }
+}
+
+function onHookKeyUp(e) {
+  if (globalPtt.enabled && globalPtt.keycode != null && e.keycode === globalPtt.keycode) {
+    sendGlobalPtt(false);
+  }
+}
+
+function onHookMouseDown(e) {
+  if (globalPtt.enabled && globalPtt.mouseButton != null && e.button === globalPtt.mouseButton) {
+    sendGlobalPtt(true);
+  }
+}
+
+function onHookMouseUp(e) {
+  if (globalPtt.enabled && globalPtt.mouseButton != null && e.button === globalPtt.mouseButton) {
+    sendGlobalPtt(false);
+  }
+}
+
+function ensureHookRunning(running) {
+  if (running && !hookRunning) {
+    uIOhook.on("keydown", onHookKeyDown);
+    uIOhook.on("keyup", onHookKeyUp);
+    uIOhook.on("mousedown", onHookMouseDown);
+    uIOhook.on("mouseup", onHookMouseUp);
+    try {
+      uIOhook.start();
+      hookRunning = true;
+    } catch (err) {
+      console.error("uiohook start failed:", err);
+      uIOhook.removeListener("keydown", onHookKeyDown);
+      uIOhook.removeListener("keyup", onHookKeyUp);
+      uIOhook.removeListener("mousedown", onHookMouseDown);
+      uIOhook.removeListener("mouseup", onHookMouseUp);
+    }
+  } else if (!running && hookRunning) {
+    try {
+      uIOhook.stop();
+    } catch {
+      /* ignore */
+    }
+    uIOhook.removeListener("keydown", onHookKeyDown);
+    uIOhook.removeListener("keyup", onHookKeyUp);
+    uIOhook.removeListener("mousedown", onHookMouseDown);
+    uIOhook.removeListener("mouseup", onHookMouseUp);
+    hookRunning = false;
+  }
+}
+
+function setGlobalPtt(code, enabled) {
+  const mapped = enabled ? webCodeToUiohook(code) : null;
+  if (mapped) {
+    globalPtt = {
+      keycode: mapped.keycode ?? null,
+      mouseButton: mapped.mouseButton ?? null,
+      enabled: true,
+    };
+    ensureHookRunning(true);
+  } else {
+    globalPtt = { keycode: null, mouseButton: null, enabled: false };
+    ensureHookRunning(false);
+  }
+  return { mapped: Boolean(mapped) };
 }
 
 function openPickerWindow() {
@@ -229,6 +429,13 @@ app.whenReady().then(() => {
     openMainWindow();
   });
 
+  ipcMain.handle("ptt:set", (_e, payload) => {
+    const code =
+      payload && typeof payload === "object" ? payload.code : undefined;
+    const enabled = Boolean(payload && payload.enabled);
+    return setGlobalPtt(typeof code === "string" ? code : "", enabled);
+  });
+
   ipcMain.handle("screen:pick", (_e, prefs) => {
     if (pendingPickResolve) return { cancelled: true };
     if (prefs && typeof prefs === "object") {
@@ -310,6 +517,8 @@ app.whenReady().then(() => {
 
   setupDisplayMediaHandler();
 
+  createTray();
+
   if (app.isPackaged || process.env.GACHA_SPLASH === "1") {
     createSplashWindow();
     setupAutoUpdater();
@@ -318,10 +527,17 @@ app.whenReady().then(() => {
   }
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) openMainWindow();
+    if (mainWindow && !mainWindow.isDestroyed()) showMainWindow();
+    else openMainWindow();
   });
 });
 
+app.on("before-quit", () => {
+  isQuitting = true;
+  ensureHookRunning(false);
+});
+
 app.on("window-all-closed", () => {
+  if (tray) return;
   if (process.platform !== "darwin") app.quit();
 });
