@@ -1467,25 +1467,33 @@ input:focus {
   margin-left: auto;
 }
 
-.pv-members {
+.pv-room-scroll {
   flex: 1;
-  min-height: clamp(100px, 16vh, 168px);
+  min-height: 0;
   overflow-y: auto;
+  scrollbar-gutter: stable;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+.pv-room-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.16);
+}
+.pv-room-scroll:hover {
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+.pv-room-scroll:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+.pv-members {
+  flex: 1 0 auto;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   align-content: start;
   padding: 2px 6px 12px;
-  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
-}
-.pv-members::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.16);
-}
-.pv-members:hover {
-  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
-}
-.pv-members:hover::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.3);
 }
 
 @container (max-width: 680px) {
@@ -1783,8 +1791,7 @@ input:focus {
 
 /* просмотр трансляции на всю ширину центрального блока */
 .pv-screen-viewer {
-  flex-shrink: 1;
-  min-height: 0;
+  flex-shrink: 0;
   border-radius: 16px;
   overflow: hidden;
   background: #000;
@@ -1821,8 +1828,7 @@ input:focus {
 .pv-screen-viewer-video {
   aspect-ratio: 16 / 9;
   max-height: calc(100vh - 320px);
-  flex-shrink: 1;
-  min-height: 0;
+  flex-shrink: 0;
 }
 
 .pv-screen-viewer-video video {

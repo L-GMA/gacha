@@ -1489,6 +1489,7 @@ export function VoiceRoom({
         </div>
       )}
 
+      <div className="pv-room-scroll">
       {viewingScreenId && viewingTrack && (
         <div className="pv-screen-viewer">
           <div className="pv-screen-viewer-head">
@@ -1645,6 +1646,7 @@ export function VoiceRoom({
             </div>
           );
         })}
+      </div>
       </div>
 
       {micUnavailable && (
