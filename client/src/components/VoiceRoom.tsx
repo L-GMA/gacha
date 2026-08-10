@@ -52,6 +52,24 @@ const screenBitrate = (fps: 30 | 60, quality: "720" | "1080"): number => {
   return Math.min(cap, Math.round(base * (fps / 30)));
 };
 
+// Целевой размер захвата/кодера для выбранного качества.
+const screenTargetSize = (quality: "720" | "1080") =>
+  quality === "1080" ? { width: 1920, height: 1080 } : { width: 1280, height: 720 };
+
+// Масштаб кодера: если источник пришёл крупнее целевого (2K/4K-монитор, где
+// браузер может проигнорировать downscale-ограничения захвата), режем кадр до
+// целевого размера на стороне кодера — иначе софтверный VP8 не успевает и
+// FPS падает до ~16-20.
+const encoderScaleFor = (
+  srcW: number,
+  srcH: number,
+  targetW: number,
+  targetH: number,
+): number => {
+  if (!srcW || !srcH) return 1;
+  return Math.max(1, srcW / targetW, srcH / targetH);
+};
+
 const restrictOwnAudioSupported = (): boolean => {
   try {
     const supported = navigator.mediaDevices.getSupportedConstraints();
@@ -1309,6 +1327,178 @@ export function VoiceRoom({
             scale: e.scaleResolutionDownBy,
           }));
         console.log("[voice] screen encodings", JSON.stringify(encs));
+        // Гарантированный потолок разрешения кодера: даже если захват пришёл
+        // с 2K/4K-монитора и браузер не урезал его, VP8 не кодирует кадры
+        // крупнее целевого размера (иначе на слабом CPU — 16-20 FPS).
+        const srcSet = rawVideo.getSettings();
+        const tgt = screenTargetSize(quality);
+        const encScale = encoderScaleFor(
+          srcSet?.width ?? 0,
+          srcSet?.height ?? 0,
+          tgt.width,
+          tgt.height,
+        );
+        if (encScale > 1.01 && sender) {
+          try {
+            const p = sender.getParameters();
+            for (const enc of p.encodings ?? []) {
+              if ((enc.scaleResolutionDownBy ?? 1) === 1) {
+                enc.scaleResolutionDownBy = encScale;
+              }
+            }
+            await sender.setParameters(p);
+            console.log(
+              "[voice] screen encoder cap",
+              JSON.stringify({
+                src: `${srcSet?.width}x${srcSet?.height}`,
+                target: tgt,
+                scale: encScale,
+              }),
+            );
+          } catch (e) {
+            console.log("[voice] screen encoder cap failed", e);
+          }
+        }
+        // Адаптивный битрейт: когда аплинк слабеет (оценка BWE) или растут
+        // потери — плавно роняем потолки битрейта и FPS слоёв, чтобы картинка
+        // не фризила; при восстановлении канала поднимаем потолок обратно.
+        let adaptTimer: ReturnType<typeof setInterval> | null = null;
+        const baseCap =
+          publishOptions.screenShareEncoding?.maxBitrate ?? 0;
+        let topCap = baseCap;
+        let topFps = fps;
+        let lowStreak = 0;
+        let highStreak = 0;
+        let smoothLoss = 0;
+        let prevBytes = 0;
+        let prevTs = 0;
+        let prevLost = 0;
+        let prevRecv = 0;
+        const adapt = async () => {
+          if (!roomRef.current || !sender) return;
+          let stats: RTCStatsReport;
+          try {
+            stats = await sender.getStats();
+          } catch {
+            return;
+          }
+          let avail = 0;
+          let lost = 0;
+          let recv = 0;
+          let bytes = 0;
+          let now = 0;
+          stats.forEach((s) => {
+            if (
+              s.type === "candidate-pair" &&
+              s.state === "succeeded" &&
+              s.availableOutgoingBitrate
+            ) {
+              avail = Math.max(avail, s.availableOutgoingBitrate);
+            } else if (s.type === "remote-inbound-rtp" && s.kind === "video") {
+              lost += s.packetsLost ?? 0;
+              recv += s.packetsReceived ?? 0;
+            } else if (s.type === "outbound-rtp" && s.kind === "video" && s.bytesSent) {
+              bytes += s.bytesSent;
+              now = Math.max(now, s.timestamp);
+            }
+          });
+          // Потери считаем дельтой между тиками (cumulative-счётчики RTCP не
+          // убывают, иначе после вспышки потерь потолок не восстановится).
+          const dRecv = recv - prevRecv;
+          const dLost = lost - prevLost;
+          const loss =
+            dRecv > 0 ? Math.max(0, Math.min(1, dLost / (dRecv + dLost))) : 0;
+          prevLost = lost;
+          prevRecv = recv;
+          // Фактический битрейт кодера за интервал — от него отталкиваемся,
+          // чтобы не резать потолок на здоровом канале (контент может быть
+          // статичным и давать мало битрейта, но канал при этом свободен).
+          const dtS = prevTs && now > prevTs ? (now - prevTs) / 1000 : 0;
+          const currBps =
+            dtS > 0.4 && bytes > prevBytes ? ((bytes - prevBytes) * 8) / dtS : 0;
+          prevBytes = bytes;
+          prevTs = now;
+          smoothLoss = smoothLoss * 0.7 + loss * 0.3;
+          let action: "none" | "down" | "up" = "none";
+          if (loss > 0.06) {
+            // Заметные потери — жёстко снижаем потолок, пока канал не устаканится.
+            lowStreak++;
+            highStreak = 0;
+            topCap = Math.max(400_000, Math.round(topCap * 0.6));
+            action = "down";
+          } else if (
+            loss > 0.02 ||
+            (avail > 0 && currBps > avail * 0.9 && avail < topCap * 0.95)
+          ) {
+            // Лёгкие потери либо мы упёрлись в пропускную способность канала
+            // (кодер выдаёт почти всё, что позволяет BWE) — снижаем до 80% от
+            // фактической пропускной способности.
+            lowStreak++;
+            highStreak = 0;
+            const target = Math.max(
+              400_000,
+              Math.round(
+                Math.min(topCap, Math.max(currBps, avail) * 0.8),
+              ),
+            );
+            if (target < topCap) {
+              topCap = target;
+              action = "down";
+            }
+          } else if (
+            smoothLoss < 0.015 &&
+            (avail === 0 || avail > topCap * 1.5) &&
+            currBps < topCap * 0.85
+          ) {
+            // Канал свободен и кодер не упирается в потолок — плавно
+            // возвращаемся к исходному качеству.
+            highStreak++;
+            lowStreak = 0;
+            if (highStreak >= 3 && topCap < baseCap) {
+              topCap = Math.min(baseCap, Math.round(topCap * 1.25));
+              action = "up";
+              if (topCap >= baseCap && topFps < fps) topFps = fps;
+            }
+          } else {
+            lowStreak = 0;
+            highStreak = 0;
+          }
+          if (action === "down" && topCap < baseCap * 0.3 && topFps === 60) {
+            topFps = 30;
+          }
+          if (action !== "none" && baseCap > 0) {
+            try {
+              const p = sender.getParameters();
+              const top = Math.round(topCap);
+              if ((p.encodings ?? []).length === 1) {
+                p.encodings[0].maxBitrate = top;
+                p.encodings[0].maxFramerate = topFps;
+              } else {
+                for (const enc of p.encodings ?? []) {
+                  enc.maxFramerate = topFps;
+                  enc.maxBitrate =
+                    enc.rid === "h"
+                      ? top
+                      : Math.max(150_000, Math.round(top / 4));
+                }
+              }
+              await sender.setParameters(p);
+              console.log(
+                "[voice] screen adapt",
+                JSON.stringify({
+                  action,
+                  topCap,
+                  topFps,
+                  avail,
+                  loss: +loss.toFixed(3),
+                }),
+              );
+            } catch {
+              /* ignore */
+            }
+          }
+        };
+        adaptTimer = setInterval(() => void adapt(), 2000);
         // Замер фактического FPS источника — показываем реальные цифры в UI.
         const fpsVideo = document.createElement("video");
         fpsVideo.muted = true;
@@ -1351,6 +1541,7 @@ export function VoiceRoom({
         if (!roomRef.current) {
           running = false;
           if (fpsTimer) clearInterval(fpsTimer);
+          if (adaptTimer) clearInterval(adaptTimer);
           setShareSourceFps(0);
           localVideo.stop();
           localAudio?.stop();
@@ -1364,6 +1555,7 @@ export function VoiceRoom({
             if (!running) return;
             running = false;
             if (fpsTimer) clearInterval(fpsTimer);
+            if (adaptTimer) clearInterval(adaptTimer);
             setShareSourceFps(0);
             void room.localParticipant.unpublishTrack(localVideo).catch(() => {});
             if (localAudio)
