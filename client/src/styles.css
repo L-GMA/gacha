@@ -60,8 +60,89 @@ body {
 
 /* ---------- layout ---------- */
 
+.app-frame {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- custom window titlebar ---------- */
+
+.titlebar {
+  position: relative;
+  flex-shrink: 0;
+  height: 38px;
+  display: flex;
+  align-items: stretch;
+  background: rgba(8, 8, 10, 0.92);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  user-select: none;
+  -webkit-user-select: none;
+  z-index: 6000;
+}
+
+.titlebar-drag {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.titlebar-title {
+  padding-left: 16px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: rgba(245, 245, 247, 0.55);
+  white-space: nowrap;
+}
+
+.titlebar-controls {
+  flex-shrink: 0;
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.titlebar-btn {
+  width: 46px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: rgba(245, 245, 247, 0.7);
+  cursor: default;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.titlebar-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.titlebar-btn:active {
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.titlebar-close:hover {
+  background: #e81123;
+  color: #ffffff;
+}
+
+.titlebar-close:active {
+  background: #bf0f1e;
+}
+
 .screen {
-  min-height: 100vh;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -744,7 +825,8 @@ input:focus {
 /* ============ server layout ============ */
 
 .server {
-  height: 100vh;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;

@@ -15,6 +15,17 @@ contextBridge.exposeInMainWorld("desktop", {
     ipcRenderer.on("voice:global-ptt", listener);
     return () => ipcRenderer.removeListener("voice:global-ptt", listener);
   },
+  windowControls: {
+    minimize: () => ipcRenderer.send("window:minimize"),
+    toggleMaximize: () => ipcRenderer.send("window:toggle-maximize"),
+    close: () => ipcRenderer.send("window:close"),
+    isMaximized: () => ipcRenderer.invoke("window:is-maximized"),
+    onMaximizedChange: (callback) => {
+      const listener = (_event, maximized) => callback(Boolean(maximized));
+      ipcRenderer.on("window:maximized", listener);
+      return () => ipcRenderer.removeListener("window:maximized", listener);
+    },
+  },
 });
 
 contextBridge.exposeInMainWorld("gachaScreen", {

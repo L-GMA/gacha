@@ -19,6 +19,13 @@ interface Window {
     }) => Promise<{ mapped: boolean }>;
     getSound?: (url: string) => Promise<string>;
     onGlobalPtt?: (callback: (down: boolean) => void) => () => void;
+    windowControls?: {
+      minimize: () => void;
+      toggleMaximize: () => void;
+      close: () => void;
+      isMaximized: () => Promise<boolean>;
+      onMaximizedChange: (callback: (maximized: boolean) => void) => () => void;
+    };
   };
   gachaScreen?: {
     pick?: (prefs: { quality: string; fps: number }) => Promise<

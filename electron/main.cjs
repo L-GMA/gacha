@@ -57,6 +57,7 @@ function openMainWindow() {
     minWidth: 940,
     minHeight: 600,
     backgroundColor: "#313338",
+    frame: false,
     autoHideMenuBar: true,
     title: "GACHA",
     webPreferences: {
@@ -68,6 +69,15 @@ function openMainWindow() {
       backgroundThrottling: false,
     },
   });
+
+  const forwardMaximized = () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("window:maximized", mainWindow.isMaximized());
+    }
+  };
+  mainWindow.on("maximize", forwardMaximized);
+  mainWindow.on("unmaximize", forwardMaximized);
+  mainWindow.webContents.on("did-finish-load", forwardMaximized);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
@@ -521,6 +531,24 @@ app.whenReady().then(() => {
     updateSkipped = true;
     openMainWindow();
   });
+
+  ipcMain.on("window:minimize", () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.minimize();
+  });
+
+  ipcMain.on("window:toggle-maximize", () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (mainWindow.isMaximized()) mainWindow.unmaximize();
+    else mainWindow.maximize();
+  });
+
+  ipcMain.on("window:close", () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
+  });
+
+  ipcMain.handle("window:is-maximized", () =>
+    mainWindow && !mainWindow.isDestroyed() ? mainWindow.isMaximized() : false,
+  );
 
   ipcMain.handle("ptt:set", (_e, payload) => {
     const code =

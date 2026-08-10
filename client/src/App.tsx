@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type User } from "./api.js";
 import { AuthForm } from "./components/AuthForm.js";
 import { Server } from "./components/Server.js";
+import { TitleBar } from "./components/TitleBar.js";
 
 type View = "start" | "login" | "register";
 
@@ -27,10 +28,11 @@ export function App() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="screen">Загрузка...</div>;
-
-  if (user) {
-    return (
+  let content;
+  if (loading) {
+    content = <div className="screen">Загрузка...</div>;
+  } else if (user) {
+    content = (
       <Server
         invitedBy={invitedBy}
         onLogout={() => {
@@ -40,30 +42,35 @@ export function App() {
         }}
       />
     );
-  }
-
-  if (view === "login" || view === "register") {
-    return (
+  } else if (view === "login" || view === "register") {
+    content = (
       <AuthForm
         mode={view}
         onBack={() => setView("start")}
         onSuccess={loadUser}
       />
     );
+  } else {
+    content = (
+      <div className="screen">
+        <h1 className="logo">GACHA</h1>
+        <p className="subtitle">Закрытый чат вашей компании</p>
+        <div className="buttons">
+          <button className="btn primary" onClick={() => setView("login")}>
+            Авторизация
+          </button>
+          <button className="btn ghost" onClick={() => setView("register")}>
+            Регистрация
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="screen">
-      <h1 className="logo">GACHA</h1>
-      <p className="subtitle">Закрытый чат вашей компании</p>
-      <div className="buttons">
-        <button className="btn primary" onClick={() => setView("login")}>
-          Авторизация
-        </button>
-        <button className="btn ghost" onClick={() => setView("register")}>
-          Регистрация
-        </button>
-      </div>
+    <div className="app-frame">
+      <TitleBar />
+      {content}
     </div>
   );
 }
