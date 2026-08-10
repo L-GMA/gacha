@@ -1709,31 +1709,6 @@ export function VoiceRoom({
           >
             <ScreenShareIcon />
           </button>
-          <div className="voice-ctl-selects">
-              <select
-                className="pv-qsel"
-                value={screenRes}
-                disabled={sharingScreen}
-                onChange={(e) => setScreenRes(e.target.value as "720" | "1080")}
-                title="Разрешение трансляции"
-              >
-                <option value="720">720p</option>
-                <option value="1080">1080p</option>
-              </select>
-              <select
-                className="pv-qsel"
-                value={String(screenFps)}
-                disabled={sharingScreen}
-                onChange={(e) =>
-                  setScreenFps(Number(e.target.value) as 30 | 60 | 90)
-                }
-                title="Частота кадров"
-              >
-                <option value="30">30 fps</option>
-                <option value="60">60 fps</option>
-                <option value="90">90 fps</option>
-              </select>
-            </div>
         </div>
         <button className="voice-ctl exit" onClick={leave} title="Покинуть канал">
           <LeaveIcon />

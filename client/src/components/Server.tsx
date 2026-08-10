@@ -405,7 +405,7 @@ export function Server({
               title={membersOpen ? "Скрыть список участников" : "Показать список участников"}
               onClick={toggleMembers}
             >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                 <path d="m9 6 6 6-6 6" />
               </svg>
             </button>

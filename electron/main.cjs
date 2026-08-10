@@ -373,6 +373,14 @@ async function ensureSoundLocal(url) {
   }
 }
 
+function windowFromEvent(event) {
+  if (pickerWindow && !pickerWindow.isDestroyed() && event.sender === pickerWindow.webContents) {
+    return pickerWindow;
+  }
+  if (mainWindow && !mainWindow.isDestroyed()) return mainWindow;
+  return null;
+}
+
 function openPickerWindow() {
   if (pickerWindow && !pickerWindow.isDestroyed()) {
     pickerWindow.focus();
@@ -385,6 +393,7 @@ function openPickerWindow() {
     minHeight: 400,
     parent: mainWindow,
     modal: true,
+    frame: false,
     autoHideMenuBar: true,
     backgroundColor: "#141517",
     title: "Демонстрация экрана",
@@ -395,6 +404,15 @@ function openPickerWindow() {
       sandbox: true,
     },
   });
+
+  const forwardPickerMax = () => {
+    if (pickerWindow && !pickerWindow.isDestroyed()) {
+      pickerWindow.webContents.send("window:maximized", pickerWindow.isMaximized());
+    }
+  };
+  pickerWindow.on("maximize", forwardPickerMax);
+  pickerWindow.on("unmaximize", forwardPickerMax);
+  pickerWindow.webContents.on("did-finish-load", forwardPickerMax);
   pickerWindow.loadFile(path.join(__dirname, "picker.html"));
   pickerWindow.on("closed", () => {
     pickerWindow = null;
@@ -532,23 +550,30 @@ app.whenReady().then(() => {
     openMainWindow();
   });
 
-  ipcMain.on("window:minimize", () => {
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.minimize();
+  ipcMain.on("window:minimize", (event) => {
+    const w = windowFromEvent(event);
+    if (w) w.minimize();
   });
 
-  ipcMain.on("window:toggle-maximize", () => {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    if (mainWindow.isMaximized()) mainWindow.unmaximize();
-    else mainWindow.maximize();
+  ipcMain.on("window:toggle-maximize", (event) => {
+    const w = windowFromEvent(event);
+    if (!w) return;
+    if (w.isMaximized()) w.unmaximize();
+    else w.maximize();
   });
 
-  ipcMain.on("window:close", () => {
+  ipcMain.on("window:close", (event) => {
+    if (pickerWindow && !pickerWindow.isDestroyed() && event.sender === pickerWindow.webContents) {
+      pickerWindow.close();
+      return;
+    }
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
   });
 
-  ipcMain.handle("window:is-maximized", () =>
-    mainWindow && !mainWindow.isDestroyed() ? mainWindow.isMaximized() : false,
-  );
+  ipcMain.handle("window:is-maximized", (event) => {
+    const w = windowFromEvent(event);
+    return w ? w.isMaximized() : false;
+  });
 
   ipcMain.handle("ptt:set", (_e, payload) => {
     const code =
