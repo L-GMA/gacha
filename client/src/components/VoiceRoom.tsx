@@ -1489,47 +1489,47 @@ export function VoiceRoom({
         </div>
       )}
 
-      <div className="pv-members">
-        {viewingScreenId && viewingTrack && (
-          <div className="pv-screen-viewer">
-            <div className="pv-screen-viewer-head">
-              <span className="pv-screen-viewer-title">Трансляция · {viewingName}</span>
-              <div className="pv-screen-viewer-actions">
-                <div className="pv-volume pv-viewer-volume">
-                  <input
-                    type="range"
-                    min={0}
-                    max={200}
-                    step={5}
-                    value={Math.round((screenVolumes[viewingScreenId] ?? 1) * 100)}
-                    onChange={(e) =>
-                      setScreenVolume(
-                        viewingScreenId,
-                        viewingName,
-                        Number(e.target.value) / 100,
-                      )
-                    }
-                    title={`Громкость трансляции ${viewingName}`}
-                  />
-                  <span className="pv-volume-val">
-                    {Math.round((screenVolumes[viewingScreenId] ?? 1) * 100)}%
-                  </span>
-                </div>
-                <button
-                  className="btn small danger"
-                  onClick={() => setViewingScreenId(null)}
-                  title="Прекратить просмотр трансляции"
-                >
-                  Прекратить просмотр
-                </button>
+      {viewingScreenId && viewingTrack && (
+        <div className="pv-screen-viewer">
+          <div className="pv-screen-viewer-head">
+            <span className="pv-screen-viewer-title">Трансляция · {viewingName}</span>
+            <div className="pv-screen-viewer-actions">
+              <div className="pv-volume pv-viewer-volume">
+                <input
+                  type="range"
+                  min={0}
+                  max={200}
+                  step={5}
+                  value={Math.round((screenVolumes[viewingScreenId] ?? 1) * 100)}
+                  onChange={(e) =>
+                    setScreenVolume(
+                      viewingScreenId,
+                      viewingName,
+                      Number(e.target.value) / 100,
+                    )
+                  }
+                  title={`Громкость трансляции ${viewingName}`}
+                />
+                <span className="pv-volume-val">
+                  {Math.round((screenVolumes[viewingScreenId] ?? 1) * 100)}%
+                </span>
               </div>
-            </div>
-            <div className="pv-screen-viewer-video">
-              <ScreenShareView track={viewingTrack} muted={deafened} />
+              <button
+                className="btn small danger"
+                onClick={() => setViewingScreenId(null)}
+                title="Прекратить просмотр трансляции"
+              >
+                Прекратить просмотр
+              </button>
             </div>
           </div>
-        )}
+          <div className="pv-screen-viewer-video">
+            <ScreenShareView track={viewingTrack} muted={deafened} />
+          </div>
+        </div>
+      )}
 
+      <div className="pv-members">
         <div className={`pv-card ${meSpeaking ? "speaking" : ""}`}>
           <div className="pv-card-badges">
             {voiceMode === "ptt" && (

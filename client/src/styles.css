@@ -1773,7 +1773,8 @@ input:focus {
 
 /* просмотр трансляции на всю ширину центрального блока */
 .pv-screen-viewer {
-  grid-column: 1 / -1;
+  flex-shrink: 1;
+  min-height: 0;
   border-radius: 16px;
   overflow: hidden;
   background: #000;
@@ -1810,7 +1811,8 @@ input:focus {
 .pv-screen-viewer-video {
   aspect-ratio: 16 / 9;
   max-height: calc(100vh - 320px);
-  flex: none;
+  flex-shrink: 1;
+  min-height: 0;
 }
 
 .pv-screen-viewer-video video {
