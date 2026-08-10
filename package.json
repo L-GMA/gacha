@@ -1,6 +1,6 @@
 {
   "name": "gacha-desktop",
-  "version": "0.5.44",
+  "version": "0.5.45",
   "private": true,
   "description": "GACHA desktop app",
   "author": "goowesh",
@@ -41,6 +41,7 @@
       }
     ],
     "win": {
+      "icon": "build/icon.png",
       "target": [
         {
           "target": "nsis",
@@ -51,6 +52,7 @@
       ]
     },
     "mac": {
+      "icon": "build/icon.png",
       "target": [
         "dmg"
       ],

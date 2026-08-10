@@ -17,6 +17,7 @@ import { highestRoleColor } from "../roleColor.js";
 import { Avatar } from "./Avatar.js";
 import { getSettings } from "../settings.js";
 import { openMicGraph, setVoiceMicGraph, getVoiceMicGraph } from "../micPipeline.js";
+import logoUrl from "../assets/logo.svg";
 
 export function Server({
   invitedBy,
@@ -268,7 +269,10 @@ export function Server({
     <div className="server">
       <header className="topbar server-bar">
         <div className="topbar-left">
-          <span className="logo small">GACHA</span>
+          <div className="brand">
+            <img className="app-logo" src={logoUrl} alt="GACHA" />
+            <span className="logo small">GACHA</span>
+          </div>
           {canManage && (
             <button className="btn small ghost settings-btn" onClick={() => setSettingsOpen(true)}>
               ⚙ Настройки

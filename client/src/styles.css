@@ -188,6 +188,27 @@ body {
   letter-spacing: -0.02em;
 }
 
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand .logo.small {
+  margin-bottom: 0;
+}
+
+.app-logo {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  object-fit: contain;
+  flex-shrink: 0;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
+    0 4px 14px rgba(0, 0, 0, 0.45);
+}
+
 .subtitle {
   color: rgba(245, 245, 247, 0.5);
   margin: 0 0 34px;
