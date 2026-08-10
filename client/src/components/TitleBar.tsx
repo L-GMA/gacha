@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 function MinimizeIcon() {
   return (
@@ -36,11 +36,35 @@ function CloseIcon() {
 export function TitleBar() {
   const [maximized, setMaximized] = useState(false);
   const controls = window.desktop?.windowControls;
+  const minRef = useRef<HTMLButtonElement>(null);
+  const maxRef = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!controls) return;
     void controls.isMaximized().then(setMaximized);
     return controls.onMaximizedChange(setMaximized);
+  }, [controls]);
+
+  // Кнопки слушаются нативно (не через React-делегирование): на Windows
+  // синтетические события React не доходят до кнопок в drag-области окна,
+  // нативные addEventListener работают (проверено в окне выбора трансляции).
+  useEffect(() => {
+    if (!controls) return;
+    const min = minRef.current;
+    const max = maxRef.current;
+    const close = closeRef.current;
+    const onMin = () => controls.minimize();
+    const onMax = () => controls.toggleMaximize();
+    const onClose = () => controls.close();
+    min?.addEventListener("click", onMin);
+    max?.addEventListener("click", onMax);
+    close?.addEventListener("click", onClose);
+    return () => {
+      min?.removeEventListener("click", onMin);
+      max?.removeEventListener("click", onMax);
+      close?.removeEventListener("click", onClose);
+    };
   }, [controls]);
 
   if (!controls) return null;
@@ -51,19 +75,19 @@ export function TitleBar() {
         <span className="titlebar-title">GACHA</span>
       </div>
       <div className="titlebar-controls">
-        <button type="button" className="titlebar-btn" title="Свернуть" aria-label="Свернуть" onClick={controls.minimize}>
+        <button type="button" ref={minRef} className="titlebar-btn" title="Свернуть" aria-label="Свернуть">
           <MinimizeIcon />
         </button>
         <button
           type="button"
+          ref={maxRef}
           className="titlebar-btn"
           title={maximized ? "Восстановить" : "Развернуть"}
           aria-label={maximized ? "Восстановить" : "Развернуть"}
-          onClick={controls.toggleMaximize}
         >
           {maximized ? <RestoreIcon /> : <MaximizeIcon />}
         </button>
-        <button type="button" className="titlebar-btn titlebar-close" title="Закрыть" aria-label="Закрыть" onClick={controls.close}>
+        <button type="button" ref={closeRef} className="titlebar-btn titlebar-close" title="Закрыть" aria-label="Закрыть">
           <CloseIcon />
         </button>
       </div>
