@@ -13,8 +13,9 @@ body {
     "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   background: #050506;
   background-image:
-    radial-gradient(1000px 700px at 50% -20%, #1d1d21 0%, #050506 55%),
-    radial-gradient(900px 600px at 88% 115%, #17171b 0%, #050506 60%);
+    radial-gradient(1100px 720px at 50% -20%, rgba(78, 92, 150, 0.26), rgba(20, 22, 30, 0) 58%),
+    radial-gradient(900px 620px at 90% 118%, rgba(108, 76, 148, 0.2), rgba(12, 12, 16, 0) 60%),
+    radial-gradient(760px 520px at 6% 102%, rgba(52, 88, 116, 0.16), rgba(10, 10, 14, 0) 55%);
   color: #f5f5f7;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -74,11 +75,15 @@ body {
   height: 38px;
   display: flex;
   align-items: stretch;
-  background: rgba(8, 8, 10, 0.92);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(8, 8, 10, 0.72);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   user-select: none;
   -webkit-user-select: none;
   z-index: 6000;
+  -webkit-app-region: drag;
+  app-region: drag;
 }
 
 .titlebar-drag {
@@ -86,8 +91,6 @@ body {
   min-width: 0;
   display: flex;
   align-items: center;
-  -webkit-app-region: drag;
-  app-region: drag;
 }
 
 .titlebar-title {
@@ -118,17 +121,19 @@ body {
   padding: 0;
   background: transparent;
   color: rgba(245, 245, 247, 0.7);
-  cursor: default;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
   transition: background 0.12s ease, color 0.12s ease;
 }
 
 .titlebar-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
   color: #ffffff;
 }
 
 .titlebar-btn:active {
-  background: rgba(255, 255, 255, 0.13);
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .titlebar-close:hover {
@@ -206,8 +211,11 @@ h3 {
 .btn {
   padding: 16px 34px;
   border-radius: 980px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 8px 26px -12px rgba(0, 0, 0, 0.6);
   color: #f5f5f7;
   font-size: 16px;
   font-weight: 500;
@@ -221,7 +229,10 @@ h3 {
 }
 
 .btn:hover {
-  background: rgba(255, 255, 255, 0.16);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.21), rgba(255, 255, 255, 0.08));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 16px 40px -14px rgba(0, 0, 0, 0.65);
   transform: translateY(-2px);
 }
 
@@ -236,14 +247,19 @@ h3 {
 }
 
 .btn.primary {
-  background: #f5f5f7;
+  background: linear-gradient(180deg, #ffffff, #e9e9ee);
   color: #0a0a0c;
   border-color: transparent;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    0 12px 34px -14px rgba(255, 255, 255, 0.25);
 }
 
 .btn.primary:hover {
-  background: #ffffff;
-  box-shadow: 0 14px 44px rgba(255, 255, 255, 0.28);
+  background: linear-gradient(180deg, #ffffff, #f0f0f4);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 18px 50px -12px rgba(255, 255, 255, 0.32);
 }
 
 .btn.ghost {
@@ -490,8 +506,11 @@ input:focus {
   align-items: center;
   gap: 10px;
   padding: 14px 0;
-  background: rgba(5, 5, 7, 0.92);
+  background: rgba(8, 8, 11, 0.5);
+  -webkit-backdrop-filter: blur(28px) saturate(170%);
+  backdrop-filter: blur(28px) saturate(170%);
   border-right: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.04);
   overflow-y: auto;
 }
 
@@ -839,9 +858,10 @@ input:focus {
   flex-shrink: 0;
   padding: 0 28px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(10, 10, 12, 0.6);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  backdrop-filter: blur(20px) saturate(180%);
+  background: linear-gradient(180deg, rgba(15, 15, 19, 0.55), rgba(10, 10, 13, 0.45));
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  backdrop-filter: blur(28px) saturate(180%);
+  box-shadow: 0 14px 32px -20px rgba(0, 0, 0, 0.75);
 }
 
 .topbar-right {
@@ -864,7 +884,10 @@ input:focus {
 /* ---------- panels ---------- */
 
 .panel {
-  background: rgba(9, 9, 11, 0.7);
+  background: rgba(9, 9, 11, 0.5);
+  -webkit-backdrop-filter: blur(28px) saturate(170%);
+  backdrop-filter: blur(28px) saturate(170%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   overflow-y: auto;
   padding: 18px 14px;
   display: flex;
@@ -1422,14 +1445,22 @@ input:focus {
   gap: 10px;
   padding: 12px;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.055);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(18px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 12px 32px -18px rgba(0, 0, 0, 0.6);
   transition: box-shadow 0.15s ease, border-color 0.15s ease;
   min-width: 0;
 }
 
 .pv-card.speaking {
-  box-shadow: inset 0 0 0 2px #23a55a;
+  box-shadow:
+    inset 0 0 0 2px #23a55a,
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 12px 32px -18px rgba(0, 0, 0, 0.6);
   border-color: rgba(35, 165, 90, 0.35);
 }
 
@@ -1742,7 +1773,10 @@ input:focus {
   height: 40px;
   border: none;
   border-radius: 10px;
-  background: #4e5058;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.08));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 6px 16px -10px rgba(0, 0, 0, 0.55);
   color: rgba(245, 245, 247, 0.9);
   display: flex;
   align-items: center;
@@ -1754,7 +1788,7 @@ input:focus {
 }
 
 .voice-ctl:hover:not(:disabled) {
-  background: #5f626c;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.23), rgba(255, 255, 255, 0.12));
 }
 
 .voice-ctl:active:not(:disabled) {
@@ -2152,6 +2186,14 @@ input:focus {
 .message {
   display: flex;
   gap: 10px;
+  padding: 4px 8px;
+  margin: -4px -8px;
+  border-radius: 12px;
+  transition: background 0.15s var(--ease-fast);
+}
+
+.message:hover {
+  background: rgba(255, 255, 255, 0.035);
 }
 
 .message-body {
@@ -2234,6 +2276,10 @@ input:focus {
   gap: 8px;
   padding: 12px 18px 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(8, 8, 10, 0.35);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  backdrop-filter: blur(22px) saturate(160%);
+  box-shadow: 0 -14px 32px -20px rgba(0, 0, 0, 0.6);
   flex-shrink: 0;
 }
 
@@ -2250,15 +2296,21 @@ input:focus {
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.13);
   background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   color: #f5f5f7;
   font-family: inherit;
   font-size: 14px;
   outline: none;
-  transition: border-color 0.2s var(--ease-fast);
+  transition: border-color 0.2s var(--ease-fast), box-shadow 0.2s var(--ease-fast),
+    background 0.2s var(--ease-fast);
 }
 
 .chat-input-row input:focus {
-  border-color: rgba(255, 255, 255, 0.32);
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.09);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 0 4px rgba(255, 255, 255, 0.07);
 }
 
 .chat-input-row .btn {
@@ -2584,7 +2636,9 @@ input:focus {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  box-shadow: 0 40px 90px rgba(0, 0, 0, 0.8);
+  box-shadow:
+    0 40px 90px rgba(0, 0, 0, 0.8),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
   animation: modalIn 0.4s var(--ease) both;
 }
 

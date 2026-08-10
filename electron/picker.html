@@ -10,6 +10,9 @@
   body {
     font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
     background: #141517;
+    background-image:
+      radial-gradient(800px 500px at 50% -20%, rgba(78, 92, 150, 0.2), rgba(20, 22, 30, 0) 60%),
+      radial-gradient(700px 480px at 90% 115%, rgba(108, 76, 148, 0.14), rgba(12, 12, 16, 0) 60%);
     color: #f5f5f7;
     height: 100vh;
     display: flex;
@@ -21,18 +24,20 @@
     flex-shrink: 0;
     display: flex;
     align-items: stretch;
-    background: rgba(8, 8, 10, 0.92);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(8, 8, 10, 0.72);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    backdrop-filter: blur(24px) saturate(180%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
     user-select: none;
     -webkit-user-select: none;
+    -webkit-app-region: drag;
+    app-region: drag;
   }
   .titlebar-drag {
     flex: 1;
     min-width: 0;
     display: flex;
     align-items: center;
-    -webkit-app-region: drag;
-    app-region: drag;
   }
   .titlebar-title {
     padding-left: 16px;
@@ -60,11 +65,13 @@
     padding: 0;
     background: transparent;
     color: rgba(245, 245, 247, 0.7);
-    cursor: default;
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
     transition: background 0.12s ease, color 0.12s ease;
   }
-  .titlebar-btn:hover { background: rgba(255, 255, 255, 0.08); color: #ffffff; }
-  .titlebar-btn:active { background: rgba(255, 255, 255, 0.13); }
+  .titlebar-btn:hover { background: rgba(255, 255, 255, 0.1); color: #ffffff; }
+  .titlebar-btn:active { background: rgba(255, 255, 255, 0.16); }
   .titlebar-close:hover { background: #e81123; color: #ffffff; }
   .titlebar-close:active { background: #bf0f1e; }
   header {
@@ -111,11 +118,14 @@
     border: 1px solid rgba(255,255,255,0.12);
     border-radius: 12px;
     overflow: hidden;
-    background: rgba(255,255,255,0.04);
+    background: rgba(255,255,255,0.055);
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+    backdrop-filter: blur(16px) saturate(150%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 12px 28px -18px rgba(0,0,0,0.6);
     cursor: pointer;
-    transition: border-color 0.12s ease, transform 0.1s ease;
+    transition: border-color 0.12s ease, transform 0.1s ease, box-shadow 0.12s ease;
   }
-  .src:hover { border-color: rgba(255,255,255,0.4); transform: translateY(-1px); }
+  .src:hover { border-color: rgba(255,255,255,0.4); transform: translateY(-1px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 18px 36px -20px rgba(0,0,0,0.7); }
   .src:active { transform: scale(0.98); }
   .thumb {
     width: 100%;
