@@ -23,6 +23,9 @@ $SSH gacha-prod 'cd /opt/gacha/server && npm ci --no-audit --no-fund >/dev/null 
 echo "== [5/5] Перезапуск =="
 $SSH gacha-prod 'sudo systemctl restart gacha-server && sleep 2 && systemctl is-active gacha-server'
 
+echo "== Восстановление desktop-сборки (локальный dist должен оставаться в desktop-режиме) =="
+(cd "$PROJ/client" && npm run build:desktop)
+
 echo "== Проверка =="
 curl -sf http://127.0.0.1:3000/api/health || $SSH gacha-prod 'curl -s http://127.0.0.1:3000/api/health'
 echo
