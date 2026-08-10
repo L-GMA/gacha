@@ -7,6 +7,7 @@ import {
   LocalVideoTrack,
   LocalAudioTrack,
   type RemoteParticipant,
+  type TrackPublishOptions,
 } from "livekit-client";
 import { api } from "../api.js";
 import { Avatar } from "./Avatar.js";
@@ -42,21 +43,13 @@ const absAssetUrl = (u: string | null | undefined): string | null => {
   return u.startsWith("/") ? `https://gachandra.ru${u}` : u;
 };
 
-const screenBitrate = (fps: 30 | 60 | 90, quality: "720" | "1080"): number => {
-  const base = quality === "1080" ? 8_000_000 : 5_000_000;
-  return Math.round(base * (fps / 30));
-};
-
-const supportsH264 = (): boolean => {
-  try {
-    const caps = RTCRtpSender.getCapabilities?.("video");
-    return (
-      caps?.codecs?.some((c) => c.mimeType.toLowerCase().includes("h264")) ??
-      false
-    );
-  } catch {
-    return false;
-  }
+// Discord-подобные потолки битрейта трансляции (на один верхний слой):
+// 720p30 ~4 Мбит/с, 720p60 до 6, 1080p30 ~8, 1080p60 до 12.
+// Нижние simulcast-слои строятся от этих значений автоматически.
+const screenBitrate = (fps: 30 | 60, quality: "720" | "1080"): number => {
+  const base = quality === "1080" ? 8_000_000 : 4_000_000;
+  const cap = quality === "1080" ? 12_000_000 : 6_000_000;
+  return Math.min(cap, Math.round(base * (fps / 30)));
 };
 
 const restrictOwnAudioSupported = (): boolean => {
@@ -236,9 +229,9 @@ export function VoiceRoom({
   const [screenRes, setScreenRes] = useState<"720" | "1080">(() =>
     readScreenPref("res", "1080") === "720" ? "720" : "1080",
   );
-  const [screenFps, setScreenFps] = useState<30 | 60 | 90>(() => {
+  const [screenFps, setScreenFps] = useState<30 | 60>(() => {
     const v = readScreenPref("fps", "30");
-    return v === "90" ? 90 : v === "60" ? 60 : 30;
+    return v === "60" ? 60 : 30;
   });
   const [screens, setScreens] = useState<
     { identity: string; track: Track; isMe: boolean }[]
@@ -632,7 +625,7 @@ export function VoiceRoom({
       try {
         const { token, url } = await api.voiceJoin(channelId);
         if (!alive) return;
-        room = new Room();
+        room = new Room({ adaptiveStream: true, dynacast: true });
         roomRef.current = room;
         room.on(RoomEvent.ParticipantConnected, (p: RemoteParticipant) => {
           const mine = room?.localParticipant.joinedAt?.getTime() ?? 0;
@@ -667,6 +660,7 @@ export function VoiceRoom({
           refresh();
         });
         room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
+          if (participant.isLocal) return;
           if (track.kind === "audio") {
             if (pub.source === Track.Source.ScreenShareAudio) {
               attachScreenAudio(track, participant);
@@ -680,6 +674,7 @@ export function VoiceRoom({
           refresh();
         });
         room.on(RoomEvent.TrackUnsubscribed, (track, pub, participant) => {
+          if (participant.isLocal) return;
           if (track.kind === "audio") {
             if (pub.source === Track.Source.ScreenShareAudio) {
               detachScreenAudio(track, participant);
@@ -1215,14 +1210,21 @@ export function VoiceRoom({
       screenBusyRef.current = false;
       return;
     }
-    const start = async (quality: "720" | "1080", fps: 30 | 60 | 90) => {
-      writeScreenPref("res", quality);
+        const start = async (quality: "720" | "1080", fps: 30 | 60) => {
+          writeScreenPref("res", quality);
       writeScreenPref("fps", String(fps));
       const width = quality === "1080" ? 1920 : 1280;
       const height = quality === "1080" ? 1080 : 720;
       try {
         const stream = await navigator.mediaDevices.getDisplayMedia({
-          video: { frameRate: { ideal: fps } },
+          video: {
+            // Сразу режем захват до целевого разрешения/FPS: Chromium сам
+            // ресемплит 2K/4K источник без прогона кадров через канвас
+            // (двойное кодирование = лаги на больших разрешениях).
+            width: { ideal: width, max: width },
+            height: { ideal: height, max: height },
+            frameRate: { ideal: fps, max: fps },
+          },
           audio: {
             echoCancellation: false,
             noiseSuppression: false,
@@ -1244,58 +1246,87 @@ export function VoiceRoom({
           for (const t of stream.getTracks()) t.stop();
           return;
         }
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const gctx = canvas.getContext("2d");
-        if (!gctx) throw new Error("Не удалось создать холст для демонстрации");
-        const videoEl = document.createElement("video");
-        videoEl.muted = true;
-        videoEl.playsInline = true;
-        videoEl.srcObject = new MediaStream([rawVideo]);
-        videoEl.style.cssText =
-          "position:fixed;top:-10000px;left:-10000px;width:1px;height:1px;opacity:0;pointer-events:none;";
-        document.body.appendChild(videoEl);
-        const ready = new Promise<void>((resolve) => {
-          if (videoEl.readyState >= 2 && videoEl.videoWidth > 0) {
-            resolve();
-            return;
-          }
-          videoEl.addEventListener("loadeddata", () => resolve(), { once: true });
-          setTimeout(resolve, 1500);
-        });
-        await videoEl.play().catch(() => {});
-        await ready;
-        let running = true;
-        let drawTimer: ReturnType<typeof setInterval> | null = null;
-        let fpsTimer: ReturnType<typeof setInterval> | null = null;
-        const outStream = canvas.captureStream(fps);
-        const outVideo = outStream.getVideoTracks()[0] as MediaStreamTrack & {
-          requestFrame?: () => void;
+        // Страховка: просим браузер пересемплить трек до целевого размера.
+        // Без этого захват 2K/4K ушёл бы как есть, и верхний слой был бы 4K.
+        try {
+          await rawVideo.applyConstraints({
+            width: { ideal: width, max: width },
+            height: { ideal: height, max: height },
+            frameRate: { ideal: fps, max: fps },
+          });
+        } catch {
+          /* ограничение не критично — опубликуем как есть */
+        }
+        if (!roomRef.current) {
+          for (const t of stream.getTracks()) t.stop();
+          return;
+        }
+        const localVideo = new LocalVideoTrack(rawVideo);
+        const publishOptions: TrackPublishOptions = {
+          source: Track.Source.ScreenShare,
+          name: "screen",
+          // Simulcast: зритель на слабой сети автоматически получает нижний
+          // слой (360p/720p) вместо одного жирного потока — как в Discord.
+          // Верхний слой = целевое разрешение из screenShareEncoding.
+          simulcast: true,
+          // VP8 — самый надёжный кодек для simulcast в Chromium (аппаратный
+          // H.264 часто не умеет несколько слоёв). Без канваса CPU хватает
+          // на софтверное кодирование.
+          videoCodec: "vp8",
+          backupCodec: false,
+          screenShareEncoding: {
+            maxBitrate: screenBitrate(fps, quality),
+            maxFramerate: fps,
+          },
         };
-        const draw = () => {
-          if (!running) return;
-          try {
-            gctx.drawImage(videoEl, 0, 0, width, height);
-          } catch {
-            /* ignore */
-          }
-          try {
-            outVideo.requestFrame?.();
-          } catch {
-            /* ignore */
-          }
-        };
-        draw();
-        drawTimer = setInterval(draw, 1000 / fps);
+        try {
+          await room.localParticipant.publishTrack(localVideo, publishOptions);
+        } catch {
+          // Редкий кодер без simulcast — публикуем один слой.
+          await room.localParticipant.publishTrack(localVideo, {
+            ...publishOptions,
+            simulcast: false,
+          });
+        }
+        if (!roomRef.current) {
+          localVideo.stop();
+          for (const t of stream.getTracks()) t.stop();
+          return;
+        }
+        console.log(
+          "[voice] screen published",
+          quality,
+          fps,
+          JSON.stringify(rawVideo.getSettings()),
+        );
+        const sender = localVideo.sender;
+        const encs = sender
+          ?.getParameters?.()
+          .encodings.map((e) => ({
+            rid: e.rid,
+            maxBitrate: e.maxBitrate,
+            maxFramerate: e.maxFramerate,
+            scale: e.scaleResolutionDownBy,
+          }));
+        console.log("[voice] screen encodings", JSON.stringify(encs));
         // Замер фактического FPS источника — показываем реальные цифры в UI.
+        const fpsVideo = document.createElement("video");
+        fpsVideo.muted = true;
+        fpsVideo.playsInline = true;
+        fpsVideo.style.cssText =
+          "position:fixed;top:-10000px;left:-10000px;width:1px;height:1px;opacity:0;pointer-events:none;";
+        document.body.appendChild(fpsVideo);
+        fpsVideo.srcObject = new MediaStream([rawVideo]);
+        let running = true;
         let srcFrames = 0;
+        let fpsTimer: ReturnType<typeof setInterval> | null = null;
         try {
           const tick = () => {
+            if (!running) return;
             srcFrames++;
-            if (running) videoEl.requestVideoFrameCallback(tick);
+            fpsVideo.requestVideoFrameCallback(tick);
           };
-          videoEl.requestVideoFrameCallback(tick);
+          fpsVideo.requestVideoFrameCallback(tick);
           fpsTimer = setInterval(() => {
             setShareSourceFps(srcFrames);
             srcFrames = 0;
@@ -1303,34 +1334,7 @@ export function VoiceRoom({
         } catch {
           /* ignore */
         }
-        const localVideo = new LocalVideoTrack(outVideo);
-        await room.localParticipant.publishTrack(localVideo, {
-          source: Track.Source.ScreenShare,
-          name: "screen",
-          simulcast: false,
-          // Аппаратный H.264 сильно легче софтверного VP8 на 1080p60 —
-          // иначе канвас отдаёт 58 FPS, а кодировщик не успевает и зритель
-          // видит мало FPS. VP8-фолбэк отключаем, чтобы он не дублировал
-          // тяжёлое кодирование ради одного несовместимого зрителя.
-          videoCodec: supportsH264() ? "h264" : undefined,
-          backupCodec: false,
-          // livekit-client для screen share читает именно screenShareEncoding,
-          // videoEncoding игнорируется и проскакивает дефолтный ScreenSharePreset
-          // с maxFramerate: 15 — зритель тогда видит 15 FPS, а не источник.
-          screenShareEncoding: {
-            maxBitrate: screenBitrate(fps, quality),
-            maxFramerate: fps,
-          },
-        });
-        if (!roomRef.current) {
-          running = false;
-          if (drawTimer) clearInterval(drawTimer);
-          if (fpsTimer) clearInterval(fpsTimer);
-          localVideo.stop();
-          videoEl.remove();
-          for (const t of stream.getTracks()) t.stop();
-          return;
-        }
+        void fpsVideo.play().catch(() => {});
         // Звук трансляции публикуется отдельным треком. В вебе getDisplayMedia
         // может отдать звук таба/системы; в Electron главный процесс добавляет
         // системный loopback (audio: "loopback" в setDisplayMediaRequestHandler).
@@ -1346,12 +1350,12 @@ export function VoiceRoom({
         }
         if (!roomRef.current) {
           running = false;
-          if (drawTimer) clearInterval(drawTimer);
           if (fpsTimer) clearInterval(fpsTimer);
           setShareSourceFps(0);
           localVideo.stop();
           localAudio?.stop();
-          videoEl.remove();
+          fpsVideo.srcObject = null;
+          fpsVideo.remove();
           for (const t of stream.getTracks()) t.stop();
           return;
         }
@@ -1359,7 +1363,6 @@ export function VoiceRoom({
           stop: () => {
             if (!running) return;
             running = false;
-            if (drawTimer) clearInterval(drawTimer);
             if (fpsTimer) clearInterval(fpsTimer);
             setShareSourceFps(0);
             void room.localParticipant.unpublishTrack(localVideo).catch(() => {});
@@ -1369,8 +1372,8 @@ export function VoiceRoom({
                 .catch(() => {});
             localVideo.stop();
             localAudio?.stop();
-            videoEl.srcObject = null;
-            videoEl.remove();
+            fpsVideo.srcObject = null;
+            fpsVideo.remove();
             for (const t of stream.getTracks()) t.stop();
           },
         };
@@ -1387,6 +1390,7 @@ export function VoiceRoom({
         screenBusyRef.current = false;
       }
     };
+
     if (isDesktopApp) {
       const pick = window.gachaScreen?.pick;
       if (!pick) return;
