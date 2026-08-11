@@ -1546,7 +1546,8 @@ input:focus {
   border-radius: 0 0 16px 16px;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.9;
+  opacity: 0.85;
+  transition: opacity 0.3s ease;
 }
 
 .pv-card > *:not(.pv-card-color) {
@@ -1554,24 +1555,19 @@ input:focus {
   z-index: 1;
 }
 
-.pv-card.speaking {
-  animation: speakPulse 1.8s ease-in-out infinite;
-  border-color: rgba(35, 165, 90, 0.35);
+.pv-card.speaking .pv-card-color {
+  animation: pvColorRise 1.6s ease-in-out infinite;
 }
 
-@keyframes speakPulse {
+@keyframes pvColorRise {
   0%,
   100% {
-    box-shadow:
-      inset 0 0 0 2px #23a55a,
-      inset 0 1px 0 rgba(255, 255, 255, 0.06),
-      0 12px 32px -18px rgba(0, 0, 0, 0.6);
+    height: 50%;
+    opacity: 0.85;
   }
   50% {
-    box-shadow:
-      inset 0 0 0 3px rgba(35, 165, 90, 0.85),
-      inset 0 1px 0 rgba(255, 255, 255, 0.06),
-      0 12px 40px -12px rgba(35, 165, 90, 0.22);
+    height: 72%;
+    opacity: 1;
   }
 }
 
@@ -3969,6 +3965,7 @@ input:focus {
   height: 26px;
   border-radius: 7px;
   border: 2px solid transparent;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
   cursor: pointer;
   padding: 0;
   transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
@@ -3983,14 +3980,22 @@ input:focus {
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25);
 }
 
-.us-color-input {
-  width: 40px;
+.us-color-row .us-color-input {
+  flex: none;
+  width: 26px;
   height: 26px;
+  min-width: 0;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 2px solid rgba(255, 255, 255, 0.22);
   border-radius: 7px;
   background: rgba(255, 255, 255, 0.05);
   cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.us-color-row .us-color-input:hover {
+  transform: scale(1.12);
+  border-color: rgba(255, 255, 255, 0.55);
 }
 
 .us-color-input::-webkit-color-swatch-wrapper {
@@ -3999,12 +4004,12 @@ input:focus {
 
 .us-color-input::-webkit-color-swatch {
   border: none;
-  border-radius: 5px;
+  border-radius: 4px;
 }
 
 .us-color-input::-moz-color-swatch {
   border: none;
-  border-radius: 5px;
+  border-radius: 4px;
 }
 
 .us-field-hint {

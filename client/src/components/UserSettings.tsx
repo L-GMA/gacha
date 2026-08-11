@@ -25,6 +25,7 @@ import {
 type SectionId = "profile" | "sound" | "camera" | "notifications" | "hotkeys";
 
 const PROFILE_COLORS = [
+  "#FFFFFF",
   "#EF4444",
   "#F97316",
   "#F59E0B",
@@ -274,7 +275,7 @@ function ProfileSection({ me, onChanged }: { me: User; onChanged: () => void }) 
                 <button
                   key={c}
                   type="button"
-                  className={`us-color-swatch ${color.toLowerCase() === c ? "active" : ""}`}
+                  className={`us-color-swatch ${(color || "#FFFFFF").toLowerCase() === c.toLowerCase() ? "active" : ""}`}
                   style={{ background: c }}
                   title={c}
                   onClick={() => setColor(c)}
@@ -297,7 +298,7 @@ function ProfileSection({ me, onChanged }: { me: User; onChanged: () => void }) 
               </button>
             </div>
             <span className="us-field-hint">
-              Подсвечивает вашу карточку в войсе (градиент снизу)
+              Подсвечивает карточку в войсе (градиент снизу). По умолчанию — белый
             </span>
           </div>
         </div>
