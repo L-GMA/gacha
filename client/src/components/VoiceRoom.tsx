@@ -281,6 +281,9 @@ export function VoiceRoom({
   const storedScreenVolRef = useRef<Map<string, number>>(new Map());
   const lastAboveRef = useRef<Map<string, number>>(new Map());
   const prevSpeakingRef = useRef<string[]>([]);
+  const colorElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const meColorElRef = useRef<HTMLDivElement | null>(null);
+  const levelSmoothedRef = useRef<Map<string, number>>(new Map());
   const screensRef = useRef<Map<string, Track>>(new Map());
   const screenBusyRef = useRef(false);
   const screenCaptureRef = useRef<{
@@ -385,6 +388,7 @@ export function VoiceRoom({
     let room: Room | null = null;
     let pingTimer: ReturnType<typeof setInterval> | null = null;
     let levelTimer: ReturnType<typeof setInterval> | null = null;
+    let vizRaf = 0;
     let unsubKrisp: (() => void) | undefined;
     let unsubMic: (() => void) | undefined;
     let lastMicDevice = getSettings().micDeviceId;
@@ -641,6 +645,52 @@ export function VoiceRoom({
       }
     };
 
+    const VIZ_REST = 50;
+    const VIZ_MAX = 88;
+    const applyVizLevel = (
+      identity: string,
+      element: HTMLDivElement | null,
+      rms: number,
+    ) => {
+      if (!element) return;
+      const target =
+        VIZ_REST +
+        (VIZ_MAX - VIZ_REST) * Math.min(1, Math.sqrt(rms) * 3.2);
+      const prevSm = levelSmoothedRef.current.get(identity) ?? VIZ_REST;
+      const next = prevSm + (target - prevSm) * 0.3;
+      levelSmoothedRef.current.set(identity, next);
+      const pct = Math.min(VIZ_MAX, Math.max(VIZ_REST, next));
+      element.style.height = pct.toFixed(1) + "%";
+      element.style.opacity = String(
+        0.7 + 0.3 * ((pct - VIZ_REST) / (VIZ_MAX - VIZ_REST)),
+      );
+    };
+    const runViz = () => {
+      vizRaf = requestAnimationFrame(runViz);
+      analysersRef.current.forEach((a, identity) => {
+        let rms = 0;
+        try {
+          rms = rmsOf(a.analyser);
+        } catch {
+          return;
+        }
+        applyVizLevel(identity, colorElsRef.current.get(identity) ?? null, rms);
+      });
+      const me = meIdentityRef.current;
+      if (me) {
+        const a = analysersRef.current.get(me);
+        if (a) {
+          let rms = 0;
+          try {
+            rms = rmsOf(a.analyser);
+          } catch {
+            return;
+          }
+          applyVizLevel(me, meColorElRef.current, rms);
+        }
+      }
+    };
+
     (async () => {
       try {
         const { token, url } = await api.voiceJoin(channelId);
@@ -892,6 +942,7 @@ export function VoiceRoom({
         void samplePing();
         levelTimer = setInterval(syncLevels, 200);
         syncLevels();
+        vizRaf = requestAnimationFrame(runViz);
       } catch (err) {
         if (alive) {
           setError(err instanceof Error ? err.message : "Ошибка подключения");
@@ -915,6 +966,9 @@ export function VoiceRoom({
         );
       if (pingTimer) clearInterval(pingTimer);
       if (levelTimer) clearInterval(levelTimer);
+      if (vizRaf) cancelAnimationFrame(vizRaf);
+      colorElsRef.current.clear();
+      levelSmoothedRef.current.clear();
       audioElsRef.current.clear();
       for (const [, a] of analysersRef.current) void a.ctx.close();
       analysersRef.current.clear();
@@ -1731,8 +1785,9 @@ export function VoiceRoom({
       <div className="pv-members">
         <div className={`pv-card ${meSpeaking ? "speaking" : ""}`}>
           <div
+            ref={meColorElRef}
             className="pv-card-color"
-            style={{ background: `linear-gradient(to top, ${meColor || "#FFFFFF"} 0%, ${meColor || "#FFFFFF"}66 30%, transparent 100%)` }}
+            style={{ background: `linear-gradient(to top, ${meColor || "#FFFFFF"} 0%, transparent 100%)` }}
           />
           <div className="pv-card-badges">
             {voiceMode === "ptt" && (
@@ -1790,8 +1845,12 @@ export function VoiceRoom({
               className={`pv-card ${speakingIds.includes(p.identity) ? "speaking" : ""}`}
             >
               <div
+                ref={(el) => {
+                  if (el) colorElsRef.current.set(p.identity, el);
+                  else colorElsRef.current.delete(p.identity);
+                }}
                 className="pv-card-color"
-                style={{ background: `linear-gradient(to top, ${cardColor} 0%, ${cardColor}66 30%, transparent 100%)` }}
+                style={{ background: `linear-gradient(to top, ${cardColor} 0%, transparent 100%)` }}
               />
               <div className="pv-card-badges">
                 {isMuted && (

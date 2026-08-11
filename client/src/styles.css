@@ -1546,29 +1546,12 @@ input:focus {
   border-radius: 0 0 16px 16px;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.85;
-  transition: opacity 0.3s ease;
+  opacity: 0.7;
 }
 
 .pv-card > *:not(.pv-card-color) {
   position: relative;
   z-index: 1;
-}
-
-.pv-card.speaking .pv-card-color {
-  animation: pvColorRise 1.6s ease-in-out infinite;
-}
-
-@keyframes pvColorRise {
-  0%,
-  100% {
-    height: 50%;
-    opacity: 0.85;
-  }
-  50% {
-    height: 72%;
-    opacity: 1;
-  }
 }
 
 .pv-card-badges {
