@@ -53,10 +53,11 @@ async function getUserVoiceAttributes(
       login: string;
       nickname: string | null;
       avatar: string | null;
+      profile_color: string | null;
       join_sound_url: string | null;
       leave_sound_url: string | null;
     }>(
-      "SELECT login, nickname, avatar, join_sound_url, leave_sound_url FROM users WHERE id = $1",
+      "SELECT login, nickname, avatar, profile_color, join_sound_url, leave_sound_url FROM users WHERE id = $1",
       [userId],
     );
     const row = res.rows[0];
@@ -116,10 +117,11 @@ async function syncRoomParticipantAttributes(room: string): Promise<void> {
       login: string;
       nickname: string | null;
       avatar: string | null;
+      profile_color: string | null;
       join_sound_url: string | null;
       leave_sound_url: string | null;
     }>(
-      "SELECT id, login, nickname, avatar, join_sound_url, leave_sound_url FROM users WHERE id = ANY($1::uuid[])",
+      "SELECT id, login, nickname, avatar, profile_color, join_sound_url, leave_sound_url FROM users WHERE id = ANY($1::uuid[])",
       [userIds],
     );
     const attrsByUser = new Map(
@@ -167,12 +169,14 @@ function voiceAttrsFromRow(row: {
   login: string;
   nickname: string | null;
   avatar: string | null;
+  profile_color: string | null;
   join_sound_url: string | null;
   leave_sound_url: string | null;
 }): Record<string, string> {
   const attrs: Record<string, string> = {};
   attrs.nickname = row.nickname || row.login;
   if (row.avatar) attrs.avatar = row.avatar;
+  if (row.profile_color) attrs.color = row.profile_color;
   if (row.join_sound_url) attrs.joinSound = row.join_sound_url;
   if (row.leave_sound_url) attrs.leaveSound = row.leave_sound_url;
   return attrs;

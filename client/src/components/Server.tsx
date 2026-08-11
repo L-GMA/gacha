@@ -358,6 +358,7 @@ export function Server({
                 channelName={voiceChannelName}
                 meName={meName}
                 meAvatar={data.me.avatar}
+                meColor={data.me.profile_color}
                 meJoinSound={data.me.join_sound_url}
                 meLeaveSound={data.me.leave_sound_url}
                 onLeave={() => {

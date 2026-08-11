@@ -20,6 +20,7 @@ export type User = {
   nickname: string | null;
   avatar: string | null;
   bio: string | null;
+  profile_color?: string | null;
   join_sound_url?: string | null;
   leave_sound_url?: string | null;
   banned: boolean;
@@ -195,10 +196,15 @@ export const api = {
       body: JSON.stringify({ login, password }),
     }),
   me: () => request<{ user: User; invited_by: string | null }>("/auth/me"),
-  updateMe: (nickname: string | null, avatar: string | null, bio: string | null) =>
+  updateMe: (
+    nickname: string | null,
+    avatar: string | null,
+    bio: string | null,
+    profileColor?: string | null,
+  ) =>
     request<{ ok: boolean }>("/me", {
       method: "PATCH",
-      body: JSON.stringify({ nickname, avatar, bio }),
+      body: JSON.stringify({ nickname, avatar, bio, profile_color: profileColor }),
     }),
   createInvite: () =>
     request<{ id: string; code: string }>("/invites", { method: "POST" }),

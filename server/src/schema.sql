@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
   nickname TEXT,
   avatar TEXT,
   bio TEXT,
+  profile_color TEXT,
   banned BOOLEAN NOT NULL DEFAULT false,
   password_hash TEXT NOT NULL,
   token_version INT NOT NULL DEFAULT 0,
@@ -140,3 +141,4 @@ END $$;
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS join_sound_url TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS leave_sound_url TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_color TEXT;

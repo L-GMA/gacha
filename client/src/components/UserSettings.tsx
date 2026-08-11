@@ -24,6 +24,21 @@ import {
 
 type SectionId = "profile" | "sound" | "camera" | "notifications" | "hotkeys";
 
+const PROFILE_COLORS = [
+  "#EF4444",
+  "#F97316",
+  "#F59E0B",
+  "#22C55E",
+  "#10B981",
+  "#14B8A6",
+  "#06B6D4",
+  "#3B82F6",
+  "#6366F1",
+  "#8B5CF6",
+  "#A855F7",
+  "#EC4899",
+];
+
 const SECTIONS: { id: SectionId; label: string }[] = [
   { id: "profile", label: "Настройка профиля" },
   { id: "sound", label: "Настройка звука" },
@@ -145,6 +160,7 @@ function ProfileSection({ me, onChanged }: { me: User; onChanged: () => void }) 
   const [nickname, setNickname] = useState(me.nickname ?? "");
   const [avatar, setAvatar] = useState(me.avatar ?? "");
   const [bio, setBio] = useState(me.bio ?? "");
+  const [color, setColor] = useState(me.profile_color ?? "");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -155,6 +171,7 @@ function ProfileSection({ me, onChanged }: { me: User; onChanged: () => void }) 
     setNickname(me.nickname ?? "");
     setAvatar(me.avatar ?? "");
     setBio(me.bio ?? "");
+    setColor(me.profile_color ?? "");
   }, [me]);
 
   const roleColor = highestRoleColor(me.roles);
@@ -181,7 +198,12 @@ function ProfileSection({ me, onChanged }: { me: User; onChanged: () => void }) 
     setSaving(true);
     setSaved(false);
     try {
-      await api.updateMe(nickname.trim() || null, avatar.trim(), bio.trim() || null);
+      await api.updateMe(
+        nickname.trim() || null,
+        avatar.trim(),
+        bio.trim() || null,
+        color.trim() || null,
+      );
       onChanged();
       setSaved(true);
     } catch (err) {
@@ -245,6 +267,39 @@ function ProfileSection({ me, onChanged }: { me: User; onChanged: () => void }) 
             <input value={bio} onChange={(e) => setBio(e.target.value)} placeholder="Кратко о себе…" maxLength={50} />
             <span className="field-counter">{bio.length}/50</span>
           </label>
+          <div className="us-setting-row us-row-field us-row-field-stacked">
+            <span className="us-field-label">Цвет в войсе</span>
+            <div className="us-color-row">
+              {PROFILE_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  className={`us-color-swatch ${color.toLowerCase() === c ? "active" : ""}`}
+                  style={{ background: c }}
+                  title={c}
+                  onClick={() => setColor(c)}
+                />
+              ))}
+              <input
+                className="us-color-input"
+                type="color"
+                value={/^#[0-9a-fA-F]{6}$/.test(color) ? color.toLowerCase() : "#ffffff"}
+                title="Свой цвет"
+                onChange={(e) => setColor(e.target.value.toUpperCase())}
+              />
+              <button
+                type="button"
+                className="btn small"
+                onClick={() => setColor("")}
+                disabled={!color}
+              >
+                Сбросить
+              </button>
+            </div>
+            <span className="us-field-hint">
+              Подсвечивает вашу карточку в войсе (градиент снизу)
+            </span>
+          </div>
         </div>
       </div>
 

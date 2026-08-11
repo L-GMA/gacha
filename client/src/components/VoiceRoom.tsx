@@ -188,6 +188,7 @@ export function VoiceRoom({
   channelName,
   meName,
   meAvatar,
+  meColor,
   meJoinSound,
   meLeaveSound,
   onLeave,
@@ -202,6 +203,7 @@ export function VoiceRoom({
   channelName: string;
   meName: string;
   meAvatar: string | null;
+  meColor?: string | null;
   meJoinSound?: string | null;
   meLeaveSound?: string | null;
   onLeave: () => void;
@@ -1728,6 +1730,12 @@ export function VoiceRoom({
 
       <div className="pv-members">
         <div className={`pv-card ${meSpeaking ? "speaking" : ""}`}>
+          {meColor && (
+            <div
+              className="pv-card-color"
+              style={{ background: `linear-gradient(to top, ${meColor} 0%, transparent 50%)` }}
+            />
+          )}
           <div className="pv-card-badges">
             {voiceMode === "ptt" && (
               <span className="pv-badge" title="Режим рации (нажми и говори)">
@@ -1777,11 +1785,18 @@ export function VoiceRoom({
           const isMuted = !p.isMicrophoneEnabled || p.attributes?.gacha_muted === "1";
           const isDeafened = p.attributes?.gacha_deafened === "1";
           const isPtt = p.attributes?.gacha_ptt === "1";
+          const cardColor = p.attributes?.color;
           return (
             <div
               key={p.identity}
               className={`pv-card ${speakingIds.includes(p.identity) ? "speaking" : ""}`}
             >
+              {cardColor && (
+                <div
+                  className="pv-card-color"
+                  style={{ background: `linear-gradient(to top, ${cardColor} 0%, transparent 50%)` }}
+                />
+              )}
               <div className="pv-card-badges">
                 {isMuted && (
                   <span className="pv-badge danger" title="Микрофон выключен">

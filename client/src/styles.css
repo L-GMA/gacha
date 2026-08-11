@@ -1537,6 +1537,23 @@ input:focus {
   border-color: rgba(255, 255, 255, 0.16);
 }
 
+.pv-card-color {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 50%;
+  border-radius: 0 0 16px 16px;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.9;
+}
+
+.pv-card > *:not(.pv-card-color) {
+  position: relative;
+  z-index: 1;
+}
+
 .pv-card.speaking {
   animation: speakPulse 1.8s ease-in-out infinite;
   border-color: rgba(35, 165, 90, 0.35);
@@ -3938,6 +3955,61 @@ input:focus {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.us-color-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.us-color-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.us-color-swatch:hover {
+  transform: scale(1.12);
+}
+
+.us-color-swatch.active {
+  border-color: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25);
+}
+
+.us-color-input {
+  width: 40px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+}
+
+.us-color-input::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.us-color-input::-webkit-color-swatch {
+  border: none;
+  border-radius: 5px;
+}
+
+.us-color-input::-moz-color-swatch {
+  border: none;
+  border-radius: 5px;
+}
+
+.us-field-hint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
 }
 
 .us-avatar-row input {

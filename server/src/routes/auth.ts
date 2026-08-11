@@ -117,12 +117,13 @@ export async function authRoutes(app: FastifyInstance) {
       nickname: string | null;
       avatar: string | null;
       bio: string | null;
+      profile_color: string | null;
       join_sound_url: string | null;
       leave_sound_url: string | null;
       banned: boolean;
       roles: unknown;
     }>(
-      `SELECT u.id, u.login, u.nickname, u.avatar, u.bio, u.join_sound_url, u.leave_sound_url, u.banned,
+      `SELECT u.id, u.login, u.nickname, u.avatar, u.bio, u.profile_color, u.join_sound_url, u.leave_sound_url, u.banned,
               COALESCE(json_agg(json_build_object('id', r.id, 'name', r.name, 'kind', r.kind, 'permissions', r.permissions, 'color', r.color, 'position', r.position, 'highlight', r.highlight) ORDER BY r.position) FILTER (WHERE r.id IS NOT NULL), '[]') AS roles
        FROM users u
        LEFT JOIN user_roles ur ON ur.user_id = u.id
@@ -150,8 +151,15 @@ export async function authRoutes(app: FastifyInstance) {
       typeof body.nickname === "string" ? body.nickname.trim() || null : undefined;
     const avatar = typeof body.avatar === "string" ? body.avatar.trim() || null : undefined;
     const bio = typeof body.bio === "string" ? body.bio.trim() || null : undefined;
+    const profileColor =
+      typeof body.profile_color === "string" ? body.profile_color.trim() || null : undefined;
 
-    if (nickname === undefined && avatar === undefined && bio === undefined) {
+    if (
+      nickname === undefined &&
+      avatar === undefined &&
+      bio === undefined &&
+      profileColor === undefined
+    ) {
       return reply.status(400).send({ error: "Нет данных для обновления" });
     }
     if (nickname !== null && nickname !== undefined && nickname.length > LIMITS.nickname) {
@@ -159,6 +167,13 @@ export async function authRoutes(app: FastifyInstance) {
     }
     if (bio !== null && bio !== undefined && bio.length > LIMITS.bio) {
       return reply.status(400).send({ error: `Описание слишком длинное (максимум ${LIMITS.bio} символов)` });
+    }
+    if (
+      profileColor !== null &&
+      profileColor !== undefined &&
+      !/^#[0-9a-fA-F]{6}$/.test(profileColor)
+    ) {
+      return reply.status(400).send({ error: "Цвет должен быть в формате #RRGGBB" });
     }
     if (avatar && !(await isOwnImageUrl(avatar))) {
       return reply
@@ -188,6 +203,10 @@ export async function authRoutes(app: FastifyInstance) {
     if (bio !== undefined) {
       params.push(bio);
       set.push(`bio = $${params.length}`);
+    }
+    if (profileColor !== undefined) {
+      params.push(profileColor);
+      set.push(`profile_color = $${params.length}`);
     }
     params.push(user.sub);
     await query(`UPDATE users SET ${set.join(", ")} WHERE id = $${params.length}`, params);
