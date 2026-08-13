@@ -4,6 +4,8 @@ declare global {
   interface Window {
     __gachaJoinSounds?: number;
     __gachaLeaveSounds?: number;
+    __gachaBroadcastStartSounds?: number;
+    __gachaBroadcastJoinSounds?: number;
   }
 }
 
@@ -81,6 +83,26 @@ const makePlayer = (defaultSrc: string, key: "join" | "leave") => {
 
 export const playJoinSound = makePlayer("./sounds/voice-join.wav", "join");
 export const playLeaveSound = makePlayer("./sounds/voice-leave.wav", "leave");
+
+// Старт трансляции — слышат все участники голосового канала.
+export const playBroadcastStartSound = () => {
+  try {
+    playAudio("./sounds/bcast-start.mp3");
+    window.__gachaBroadcastStartSounds = (window.__gachaBroadcastStartSounds ?? 0) + 1;
+  } catch {
+    /* звук некритичен */
+  }
+};
+
+// Кто-то зашёл на трансляцию — слышит только её организатор.
+export const playBroadcastJoinSound = () => {
+  try {
+    playAudio("./sounds/bcast-join.mp3");
+    window.__gachaBroadcastJoinSounds = (window.__gachaBroadcastJoinSounds ?? 0) + 1;
+  } catch {
+    /* звук некритичен */
+  }
+};
 
 // Превью в настройках играет всегда, независимо от тумблера «Звуки».
 export const playCustomSound = (url: string) => {

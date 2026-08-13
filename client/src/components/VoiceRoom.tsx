@@ -11,7 +11,7 @@ import {
 } from "livekit-client";
 import { api } from "../api.js";
 import { Avatar } from "./Avatar.js";
-import { playJoinSound, playLeaveSound, playPttSound } from "../sounds.js";
+import { playJoinSound, playLeaveSound, playPttSound, playBroadcastStartSound, playBroadcastJoinSound } from "../sounds.js";
 import { DeafenOffMiniIcon, MicOffMiniIcon } from "./stateIcons.js";
 import { getSettings, subscribeSettings } from "../settings.js";
 import { applyKrisp } from "../krisp.js";
@@ -795,7 +795,18 @@ export function VoiceRoom({
           syncMic();
           refresh();
         });
-        room.on(RoomEvent.ParticipantAttributesChanged, () => {
+        room.on(RoomEvent.ParticipantAttributesChanged, (changed, participant) => {
+          const bc = changed.bcast;
+          if (bc && bc !== "") playBroadcastStartSound();
+          const vi = changed.viewing;
+          if (
+            vi &&
+            vi !== "" &&
+            vi === meIdentityRef.current &&
+            participant.identity !== meIdentityRef.current
+          ) {
+            playBroadcastJoinSound();
+          }
           refresh();
         });
         room.on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
@@ -1606,6 +1617,11 @@ export function VoiceRoom({
           for (const t of stream.getTracks()) t.stop();
           return;
         }
+        // Уведомление о старте трансляции: атрибут виден всем в канале —
+        // каждый клиент играет звук старта.
+        void room.localParticipant
+          .setAttributes({ bcast: String(Date.now()) })
+          .catch(() => {});
         screenCaptureRef.current = {
           stop: () => {
             if (!running) return;
@@ -1613,6 +1629,9 @@ export function VoiceRoom({
             if (fpsTimer) clearInterval(fpsTimer);
             if (adaptTimer) clearInterval(adaptTimer);
             setShareSourceFps(0);
+            void room.localParticipant
+              .setAttributes({ bcast: "" })
+              .catch(() => {});
             void room.localParticipant.unpublishTrack(localVideo).catch(() => {});
             if (localAudio)
               void room.localParticipant
@@ -1712,9 +1731,22 @@ export function VoiceRoom({
       ? participants.find((p) => p.identity === viewingScreenId)
       : undefined)?.attributes?.nickname ?? "";
 
+  // Кто сейчас смотрит трансляцию (поле `viewing` ставит сам зритель).
+  const pvName = (p: RemoteParticipant) =>
+    p.attributes?.nickname ?? p.name ?? p.identity;
+  const viewersOf = (identity: string) =>
+    participants.filter(
+      (p) => p.attributes?.viewing === identity && p.identity !== identity,
+    );
+  const myViewers = meIdentity ? viewersOf(meIdentity) : [];
+  const currentViewers = viewingScreenId ? viewersOf(viewingScreenId) : [];
+
   useEffect(() => {
     if (viewingScreenId && !screenByIdentity.has(viewingScreenId)) {
       setViewingScreenId(null);
+      void roomRef.current?.localParticipant
+        .setAttributes({ viewing: "" })
+        .catch(() => {});
     }
   }, [screens, viewingScreenId]);
 
@@ -1728,6 +1760,10 @@ export function VoiceRoom({
       /* подписка, скорее всего, уже активна */
     }
     setViewingScreenId(p.identity);
+    // Уведомление организатору трансляции: «кто-то зашёл смотреть».
+    void roomRef.current?.localParticipant
+      .setAttributes({ viewing: p.identity })
+      .catch(() => {});
   };
 
   return (
@@ -1746,6 +1782,16 @@ export function VoiceRoom({
         <div className="pv-screen-viewer">
           <div className="pv-screen-viewer-head">
             <span className="pv-screen-viewer-title">Трансляция · {viewingName}</span>
+            {currentViewers.length > 0 && (
+              <span
+                className="pv-viewers-chip"
+                title={currentViewers.map(pvName).join(", ")}
+              >
+                👁 {currentViewers.length} ·{" "}
+                {currentViewers.slice(0, 3).map(pvName).join(", ")}
+                {currentViewers.length > 3 ? "…" : ""}
+              </span>
+            )}
             <div className="pv-screen-viewer-actions">
               <div className="pv-volume pv-viewer-volume">
                 <input
@@ -1769,7 +1815,12 @@ export function VoiceRoom({
               </div>
               <button
                 className="btn small danger"
-                onClick={() => setViewingScreenId(null)}
+                onClick={() => {
+                  setViewingScreenId(null);
+                  void roomRef.current?.localParticipant
+                    .setAttributes({ viewing: "" })
+                    .catch(() => {});
+                }}
                 title="Прекратить просмотр трансляции"
               >
                 Прекратить просмотр
@@ -1813,6 +1864,29 @@ export function VoiceRoom({
                 <span className="pv-card-screen-label">
                   Ваш экран · {shareSourceFps > 0 ? `${shareSourceFps} FPS` : "…"}
                 </span>
+                <div className="pv-card-screen-viewers">
+                  {myViewers.length === 0 ? (
+                    <span className="pv-viewers-empty">
+                      Пока никто не смотрит трансляцию
+                    </span>
+                  ) : (
+                    <>
+                      <span className="pv-viewers-empty">
+                        Смотрят ({myViewers.length}):
+                      </span>
+                      {myViewers.map((v) => (
+                        <span className="pv-viewer-chip" key={v.identity}>
+                          <Avatar
+                            src={absAssetUrl(v.attributes?.avatar ?? null)}
+                            name={pvName(v)}
+                            size={18}
+                          />
+                          {pvName(v)}
+                        </span>
+                      ))}
+                    </>
+                  )}
+                </div>
               </div>
             ) : (
               <Avatar src={absAssetUrl(meAvatar)} name={meName} size={64} online />
